@@ -1,0 +1,7 @@
+# סודות ונתונים אמיתיים לא נכנסים ל-git לעולם
+api/config.php
+api/data/
+*.key
+*.pem
+.env
+node_modules/

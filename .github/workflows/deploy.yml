@@ -9,24 +9,69 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+env:
+  SITE_URL: https://chepti.com/family
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # הסודות מוגדרים ב: Settings → Secrets and variables → Actions
-      #   Secrets:   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
-      #   Variables: FTP_DIR (אופציונלי, ברירת מחדל: public_html/family/)
-      - name: Upload via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          server-dir: ${{ vars.FTP_DIR || 'public_html/family/' }}
-          exclude: |
-            **/.git*
-            **/.git*/**
-            README.md
+      # הסודות מוגדרים פעם אחת (ראו DEPLOY.md). עד אז הפריסה מדלגת בלי להיכשל.
+      - name: Check deploy secrets
+        id: check
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          for v in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_PATH DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!v}" ]; then
+              echo "::notice::Secret $v is not set, skipping deploy. See DEPLOY.md."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          case "$DEPLOY_PATH" in
+            */family) ;;
+            *) echo "::error::DEPLOY_PATH must end with /family (got a different folder), refusing to deploy"; exit 1 ;;
+          esac
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload over SSH
+        if: steps.check.outputs.ready == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          # רשימה סגורה של קבצים. בכוונה בלי api/config.php ובלי מחיקה של כלום בשרת.
+          tar -czf - index.html sw.js manifest.webmanifest .htaccess css js icons \
+              api/index.php api/config.sample.php api/.htaccess \
+            | ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+                "$DEPLOY_USER@$DEPLOY_HOST" \
+                "mkdir -p '$DEPLOY_PATH' && tar -xzf - -C '$DEPLOY_PATH' --no-same-owner --no-same-permissions \
+                 && find '$DEPLOY_PATH' -type d -exec chmod 755 {} + \
+                 && find '$DEPLOY_PATH' -type f ! -name config.php -exec chmod 644 {} +"
+
+      - name: Smoke test
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          for f in "" js/app.js js/sync.js css/style.css manifest.webmanifest; do
+            curl -fsS -o /dev/null "$SITE_URL/$f"
+          done
+          curl -fsS -X POST "$SITE_URL/api/index.php?action=ping" | tee /dev/stderr | grep -q '"ok":true'

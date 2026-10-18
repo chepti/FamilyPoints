@@ -1,0 +1,18 @@
+# הגדרות לתיקיית /family בשרת Apache/LiteSpeed (Hostinger)
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
+# ה-Service Worker תמיד צריך להיבדק מחדש כדי שעדכונים יגיעו
+<IfModule mod_headers.c>
+  <FilesMatch "^sw\.js$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# קבצים שלא שייכים לאתר
+<FilesMatch "^(DEPLOY\.md|CLAUDE\.md|README\.md)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>

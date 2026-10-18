@@ -1,7 +1,7 @@
 /* רשת קודם, מטמון כגיבוי: כך עדכונים מגיעים מיד, והאפליקציה עדיין נפתחת בלי חיבור. */
-const CACHE = 'familypoints-v1';
+const CACHE = 'familypoints-v2';
 const SHELL = [
-  './', 'index.html', 'css/style.css', 'js/store.js', 'js/art.js', 'js/app.js',
+  './', 'index.html', 'css/style.css', 'js/store.js', 'js/sync.js', 'js/art.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg',
 ];
 
@@ -19,7 +19,9 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  // קריאות ה-API אף פעם לא עוברות דרך המטמון
+  if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
   e.respondWith(
     fetch(req)
       .then((res) => {

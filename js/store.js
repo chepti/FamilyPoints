@@ -1,4 +1,4 @@
-/* מאגר הנתונים: הכל נשמר ב-localStorage של המכשיר. */
+/* מאגר הנתונים: נשמר ב-localStorage, ומסונכרן לשרת דרך Sync (js/sync.js) כשמחוברים. */
 const Store = (() => {
   const KEY = 'familypoints.v1';
   const listeners = [];
@@ -19,14 +19,19 @@ const Store = (() => {
     { title: 'סידור ארון נעליים', emoji: '👟', points: 6, period: 'month', times: 1, team: false },
   ];
 
+  const defaultSettings = () => ({ pin: '', requireApproval: true });
+
   function defaults() {
     return {
-      v: 1,
+      v: 2,
       onboarded: false,
       members: [],
       tasks: [],
       completions: [],
-      settings: { pin: '', requireApproval: true },
+      settings: defaultSettings(),
+      // מצב סנכרון: on = מחוברים לשרת, rev = הגרסה האחרונה שקיבלנו,
+      // dirty = רשומות ששונו כאן ועוד לא נשלחו
+      sync: { on: false, rev: 0, n: 0, dirty: {} },
     };
   }
 
@@ -36,9 +41,15 @@ const Store = (() => {
       if (raw) {
         const parsed = JSON.parse(raw);
         const base = defaults();
-        return Object.assign(base, parsed, {
-          settings: Object.assign(base.settings, parsed.settings || {}),
+        const s = Object.assign(base, parsed, {
+          settings: Object.assign(defaultSettings(), parsed.settings || {}),
+          sync: Object.assign(base.sync, parsed.sync || {}),
         });
+        // נתונים ישנים (גרסה 1) לא ידעו על סדר: משלימים לפי מיקום במערך
+        s.members.forEach((m, i) => { if (m.o == null) m.o = i + 1; });
+        s.tasks.forEach((t, i) => { if (t.o == null) t.o = i + 1; });
+        s.v = 2;
+        return s;
       }
     } catch (e) {
       persistent = false;
@@ -48,16 +59,98 @@ const Store = (() => {
 
   let state = load();
 
-  function save() {
+  function persist(notify = true) {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
       persistent = false;
     }
-    listeners.forEach((fn) => fn());
+    if (notify) listeners.forEach((fn) => fn());
   }
+  const save = () => persist(true);
 
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  /* ---------- מעקב שינויים לסנכרון ---------- */
+  function mark(t, id, del = false) {
+    const s = state.sync;
+    if (!s.on) return;
+    s.n += 1;
+    s.dirty[t + ':' + id] = { n: s.n, del };
+  }
+  const listFor = (t) => (t === 'member' ? state.members : t === 'task' ? state.tasks : state.completions);
+  const lookup = (t, id) => (t === 'settings' ? state.settings : listFor(t).find((x) => x.id === id));
+  const byOrder = (a, b) => (a.o - b.o) || (a.id < b.id ? -1 : 1);
+  const sortAll = () => { state.members.sort(byOrder); state.tasks.sort(byOrder); };
+
+  function hasDirty() { return Object.keys(state.sync.dirty).length > 0; }
+
+  function collectDirty() {
+    const changes = [];
+    const sent = {};
+    for (const [key, e] of Object.entries(state.sync.dirty)) {
+      const [t, id] = key.split(':');
+      sent[key] = e.n;
+      const rec = e.del ? null : lookup(t, id);
+      changes.push(rec ? { t, id, d: rec } : { t, id, del: 1 });
+    }
+    return { changes, sent };
+  }
+
+  function applyRecord(r) {
+    if (r.t === 'settings') {
+      if (!r.del) state.settings = Object.assign(defaultSettings(), r.d);
+      return;
+    }
+    const list = listFor(r.t);
+    const i = list.findIndex((x) => x.id === r.id);
+    if (r.del) { if (i >= 0) list.splice(i, 1); return; }
+    if (i >= 0) list[i] = r.d; else list.push(r.d);
+  }
+
+  /* תשובת שרת: מנקים מה שנשלח, ומיישמים שינויים של אחרים (לא דורסים מה שעוד לא נשלח) */
+  function applySync(res, sent) {
+    const s = state.sync;
+    const acks = res.acks || {};
+    for (const [key, n] of Object.entries(sent || {})) {
+      if (s.dirty[key] && s.dirty[key].n === n) delete s.dirty[key];
+    }
+    let applied = 0;
+    for (const r of res.changes || []) {
+      const key = r.t + ':' + r.id;
+      if (acks[key] === r.rev) continue; // ההד של הכתיבה שלנו עצמנו
+      if (s.dirty[key]) continue; // שינינו שוב בזמן שהבקשה בדרך
+      applyRecord(r);
+      applied++;
+    }
+    s.rev = Math.max(s.rev, res.rev || 0);
+    sortAll();
+    persist(applied > 0);
+    return applied;
+  }
+
+  function syncOn(on) {
+    state.sync.on = on;
+    if (!on) { state.sync.dirty = {}; state.sync.rev = 0; }
+    persist(false);
+  }
+
+  function markAllDirty() {
+    state.members.forEach((m) => mark('member', m.id));
+    state.tasks.forEach((t) => mark('task', t.id));
+    state.completions.forEach((c) => mark('completion', c.id));
+    mark('settings', 'main');
+    persist(false);
+  }
+
+  function replaceFromRemote(res) {
+    const sync = state.sync;
+    state = defaults();
+    state.sync = Object.assign(state.sync, { on: sync.on });
+    applySync(res, {});
+    state.onboarded = state.members.length > 0;
+    persist(true);
+  }
 
   /* ---------- זמן ותקופות ---------- */
   const pad = (n) => String(n).padStart(2, '0');
@@ -135,51 +228,87 @@ const Store = (() => {
       status,
     };
     state.completions.push(c);
+    mark('completion', c.id);
     save();
     return c;
   }
 
   function setCompletionStatus(id, status) {
     const c = state.completions.find((x) => x.id === id);
-    if (c) { c.status = status; save(); }
+    if (c) { c.status = status; mark('completion', id); save(); }
   }
 
   function removeCompletion(id) {
     state.completions = state.completions.filter((c) => c.id !== id);
+    mark('completion', id, true);
     save();
   }
 
   function upsertMember(m) {
+    if (m.o == null) m.o = Date.now();
     const i = state.members.findIndex((x) => x.id === m.id);
     if (i >= 0) state.members[i] = m; else state.members.push(m);
+    mark('member', m.id);
+    sortAll();
     save();
   }
 
   function deleteMember(id) {
     state.members = state.members.filter((m) => m.id !== id);
-    state.tasks.forEach((t) => { t.assignees = t.assignees.filter((a) => a !== id); });
+    mark('member', id, true);
+    state.tasks.forEach((t) => {
+      if (t.assignees.includes(id)) {
+        t.assignees = t.assignees.filter((a) => a !== id);
+        mark('task', t.id);
+      }
+    });
     save();
   }
 
   function upsertTask(t) {
+    if (t.o == null) t.o = Date.now();
     const i = state.tasks.findIndex((x) => x.id === t.id);
     if (i >= 0) state.tasks[i] = t; else state.tasks.push(t);
+    mark('task', t.id);
+    sortAll();
     save();
   }
 
   function deleteTask(id) {
     state.tasks = state.tasks.filter((t) => t.id !== id);
+    mark('task', id, true);
     save();
   }
 
   function addSampleTasks() {
-    SAMPLE_TASKS.forEach((s) => state.tasks.push({ id: uid(), assignees: [], ...s }));
+    const base = Date.now();
+    SAMPLE_TASKS.forEach((s, i) => {
+      const t = { id: uid(), assignees: [], o: base + i, ...s };
+      state.tasks.push(t);
+      mark('task', t.id);
+    });
+    sortAll();
     save();
   }
 
-  function update(fn) { fn(state); save(); }
+  function setSettings(patch) {
+    Object.assign(state.settings, patch);
+    mark('settings', 'main');
+    save();
+  }
 
-  function exportJSON() { return JSON.stringify(state, null, 2); }
+  function finishOnboarding(members) {
+    const base = Date.now();
+    state.members = members.map((m, i) => ({ ...m, o: base + i }));
+    state.members.forEach((m) => mark('member', m.id));
+    state.onboarded = true;
+    save();
+  }
+
+  function exportJSON() {
+    const { sync, ...rest } = state;
+    return JSON.stringify(rest, null, 2);
+  }
 
   function importJSON(text) {
     const parsed = JSON.parse(text);
@@ -187,14 +316,35 @@ const Store = (() => {
         !Array.isArray(parsed.completions)) {
       throw new Error('הקובץ לא נראה כמו גיבוי של האפליקציה');
     }
-    const base = defaults();
-    state = Object.assign(base, parsed, { settings: Object.assign(base.settings, parsed.settings || {}) });
+    const old = { member: state.members, task: state.tasks, completion: state.completions };
+    const sync = state.sync;
+    const next = Object.assign(defaults(), parsed, {
+      settings: Object.assign(defaultSettings(), parsed.settings || {}),
+    });
+    next.sync = sync;
+    next.members.forEach((m, i) => { if (m.o == null) m.o = i + 1; });
+    next.tasks.forEach((t, i) => { if (t.o == null) t.o = i + 1; });
+    state = next;
+    // רשומות שהיו וכבר לא בגיבוי נמחקות גם אצל כולם
+    for (const [t, list] of Object.entries(old)) {
+      list.forEach((x) => { if (!lookup(t, x.id)) mark(t, x.id, true); });
+    }
+    markAllDirty();
     save();
   }
 
+  /* מוחק הכל. כשמחוברים לסנכרון זה נמחק גם אצל שאר המשפחה */
   function reset() {
+    const sync = state.sync;
+    const tomb = (t, list) => list.forEach((x) => { sync.n += 1; sync.dirty[t + ':' + x.id] = { n: sync.n, del: true }; });
+    if (sync.on) {
+      tomb('member', state.members);
+      tomb('task', state.tasks);
+      tomb('completion', state.completions);
+    }
     state = defaults();
-    save();
+    state.sync = sync;
+    persist(true);
   }
 
   return {
@@ -205,6 +355,9 @@ const Store = (() => {
     periodKey, windowStart,
     addCompletion, setCompletionStatus, removeCompletion,
     upsertMember, deleteMember, upsertTask, deleteTask,
-    addSampleTasks, update, exportJSON, importJSON, reset,
+    addSampleTasks, setSettings, finishOnboarding,
+    exportJSON, importJSON, reset,
+    // סנכרון
+    hasDirty, collectDirty, applySync, syncOn, markAllDirty, replaceFromRemote,
   };
 })();

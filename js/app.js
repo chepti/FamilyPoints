@@ -151,6 +151,21 @@
         h('button', { class: 'btn', type: 'button', onclick: () => { ui.me = null; ls.set('familypoints.me', ''); sh.close(); render(); } }, 'ניקוי בחירה'))));
   }
 
+  const SYNC_LABEL = {
+    ok: ['🟢', 'מסונכרן'],
+    connecting: ['🟡', 'מתחבר…'],
+    offline: ['🟠', 'אין חיבור'],
+    auth: ['🔴', 'קוד שגוי'],
+  };
+  function syncChip() {
+    if (!Sync.enabled) return null;
+    const [dot, label] = SYNC_LABEL[Sync.status] || SYNC_LABEL.connecting;
+    return h('button', {
+      class: 'sync-chip', type: 'button', title: 'מצב סנכרון בין המכשירים',
+      onclick: () => { Sync.syncNow(); },
+    }, dot, ' ', label);
+  }
+
   function tabLink(href, ico, label, key, active, badge) {
     return h('a', { href, class: 'tab' + (active === key ? ' on' : ''), 'aria-current': active === key ? 'page' : null },
       h('span', { class: 'tab-ico', 'aria-hidden': 'true' }, ico), h('span', null, label),
@@ -162,9 +177,13 @@
     return h('div', { class: 'shell' },
       h('header', { class: 'top' },
         h('a', { class: 'brand', href: '#/' }, h('span', { class: 'brand-star' }, '⭐'), 'נקודות משפחה'),
-        h('button', { class: 'me-btn', type: 'button', onclick: pickMe },
-          me ? [avatar(me, 30), me.name] : '👋 מי אני?')),
+        h('div', { class: 'top-left' },
+          syncChip(),
+          h('button', { class: 'me-btn', type: 'button', onclick: pickMe },
+            me ? [avatar(me, 30), me.name] : '👋 מי אני?'))),
       !S.persistent && h('div', { class: 'warn' }, '⚠️ הדפדפן חוסם שמירה של נתונים (גלישה בסתר?). שינויים יימחקו ברענון.'),
+      Sync.status === 'auth' && h('div', { class: 'warn' },
+        '🔑 קוד המשפחה לא תקין (אולי הוחלף). היכנסו להורים ← הגדרות ← סנכרון והתחברו מחדש.'),
       h('main', { class: 'view' }, view),
       h('nav', { class: 'tabbar', 'aria-label': 'ניווט ראשי' },
         tabLink('#/', '🏠', 'בית', 'home', active),
@@ -539,6 +558,28 @@
   function settingsTab() {
     const st = S.state.settings;
     const pinInput = h('input', { type: 'password', inputmode: 'numeric', maxlength: '8', placeholder: st.pin ? 'קוד חדש' : 'לפחות 4 ספרות', autocomplete: 'off' });
+    const codeInput = h('input', { type: 'password', autocomplete: 'off', placeholder: 'קוד המשפחה', 'aria-label': 'קוד המשפחה' });
+    const syncCard = !Sync.available
+      ? h('div', { class: 'card' }, h('h3', null, '🔄 סנכרון בין מכשירים'),
+        h('p', null, 'הסנכרון לא זמין בכתובת הזו (השרת לא מוגדר). הנתונים נשמרים במכשיר הזה בלבד.'))
+      : Sync.enabled
+        ? h('div', { class: 'card' }, h('h3', null, '🔄 סנכרון בין מכשירים'),
+          h('p', null, `${SYNC_LABEL[Sync.status][0]} ${{ ok: 'מחוברים. שינויים מופיעים בכל המכשירים תוך כמה שניות.', connecting: 'מתחבר…', offline: 'אין חיבור לשרת כרגע. שינויים יישלחו כשהחיבור יחזור.', auth: 'הקוד שגוי או הוחלף. נתקו והתחברו מחדש.' }[Sync.status]}`),
+          h('div', { class: 'actions' },
+            h('button', { class: 'btn', type: 'button', onclick: () => Sync.syncNow() }, 'סנכרן עכשיו'),
+            h('button', {
+              class: 'btn danger', type: 'button',
+              onclick: async () => {
+                if (await askConfirm('לנתק את המכשיר הזה מהסנכרון? הנתונים יישארו כאן, אבל ייפסקו עדכונים.', 'כן, לנתק')) Sync.disconnect();
+              },
+            }, 'ניתוק')))
+        : h('div', { class: 'card' }, h('h3', null, '🔄 סנכרון בין מכשירים'),
+          h('p', null, 'הכניסו את קוד המשפחה כדי שכל המכשירים יראו אותם נתונים.'),
+          h('div', { class: 'field' }, codeInput),
+          h('button', {
+            class: 'btn primary', type: 'button',
+            onclick: () => connectWith(codeInput.value),
+          }, 'התחברות'));
     const fileInput = h('input', {
       type: 'file', accept: 'application/json,.json', style: { display: 'none' },
       onchange: (e) => {
@@ -551,7 +592,7 @@
     return [
       h('div', { class: 'card' }, h('h3', null, '✔ אישור הורים'),
         h('label', { class: 'check' },
-          h('input', { type: 'checkbox', checked: st.requireApproval, onchange: (e) => S.update((s) => { s.settings.requireApproval = e.target.checked; }) }),
+          h('input', { type: 'checkbox', checked: st.requireApproval, onchange: (e) => S.setSettings({ requireApproval: e.target.checked }) }),
           'דיווחים של ילדים מחכים לאישור'),
         h('p', null, 'כשזה כבוי הנקודות נכנסות מיד. דיווחים של הורים תמיד נכנסים מיד.')),
       h('div', { class: 'card' }, h('h3', null, '🔐 קוד הורים'),
@@ -562,22 +603,27 @@
             class: 'btn primary', type: 'button',
             onclick: () => {
               if (!/^\d{4,8}$/.test(pinInput.value)) return toast('הקוד צריך להיות 4 עד 8 ספרות');
-              S.update((s) => { s.settings.pin = pinInput.value; });
+              S.setSettings({ pin: pinInput.value });
               ui.unlocked = true; ss.set('familypoints.unlocked', '1'); toast('הקוד נשמר');
             },
           }, 'שמירת קוד'),
-          st.pin && h('button', { class: 'btn', type: 'button', onclick: () => S.update((s) => { s.settings.pin = ''; }) }, 'הסרת קוד'))),
+          st.pin && h('button', { class: 'btn', type: 'button', onclick: () => S.setSettings({ pin: '' }) }, 'הסרת קוד'))),
+      syncCard,
       h('div', { class: 'card' }, h('h3', null, '💾 גיבוי'),
-        h('p', null, 'הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. מכשיר אחר רואה אפליקציה ריקה. מומלץ לגבות מדי פעם.'),
+        h('p', null, Sync.enabled
+          ? 'הנתונים מסונכרנים לשרת. גיבוי לקובץ הוא רשת ביטחון נוספת. טעינת גיבוי מחליפה את הנתונים אצל כל המשפחה.'
+          : 'הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. מומלץ לגבות מדי פעם.'),
         h('div', { class: 'actions' },
           h('button', { class: 'btn', type: 'button', onclick: () => download(`family-points-${new Date().toISOString().slice(0, 10)}.json`, S.exportJSON()) }, '⬇ הורדת גיבוי'),
           h('button', { class: 'btn', type: 'button', onclick: () => fileInput.click() }, '⬆ טעינת גיבוי'), fileInput)),
       h('div', { class: 'card' }, h('h3', null, '🧨 איפוס'),
-        h('p', null, 'מוחק את כל המשפחה, המשימות והניקוד.'),
+        h('p', null, Sync.enabled
+          ? 'מוחק את כל המשפחה, המשימות והניקוד, בכל המכשירים!'
+          : 'מוחק את כל המשפחה, המשימות והניקוד.'),
         h('button', {
           class: 'btn danger', type: 'button',
           onclick: async () => {
-            if (await askConfirm('למחוק הכל ולהתחיל מחדש?', 'כן, למחוק הכל') &&
+            if (await askConfirm(Sync.enabled ? 'למחוק הכל אצל כל המשפחה ולהתחיל מחדש?' : 'למחוק הכל ולהתחיל מחדש?', 'כן, למחוק הכל') &&
                 await askConfirm('באמת באמת? אי אפשר לבטל.', 'מחק')) {
               S.reset(); ui.me = null; ls.set('familypoints.me', ''); ui.unlocked = false; ss.set('familypoints.unlocked', '');
               location.hash = '#/';
@@ -639,17 +685,60 @@
             id: S.uid(), name: r.name.trim(), role: r.role, avatar: r.avatar, color: COLORS[i % COLORS.length],
           }));
           if (!members.length) return toast('כתבו לפחות שם אחד');
-          S.update((s) => { s.members = members; s.onboarded = true; });
+          S.finishOnboarding(members);
           if (samples) S.addSampleTasks();
           location.hash = '#/';
         },
       }, 'יאללה מתחילים! 🚀'));
   }
 
+  /* ---------- חיבור לסנכרון ---------- */
+  async function connectWith(code, errorBox) {
+    if (!code.trim()) return toast('הכניסו את קוד המשפחה');
+    try {
+      const result = await Sync.connect(code, () => askConfirm(
+        'במכשיר הזה כבר יש נתונים, ובשרת יש נתונים של המשפחה. להחליף את מה שכאן בנתוני המשפחה?',
+        'כן, להחליף'));
+      if (result === 'joined') toast('🎉 התחברתם למשפחה!');
+      else if (result === 'uploaded') toast('הנתונים מהמכשיר הזה הועלו לשרת ✔');
+      else if (result === 'empty') toast('מחוברים! מכאן מגדירים את המשפחה');
+    } catch (e) {
+      const msg = e.message === 'bad_key' ? 'הקוד שגוי' : 'אין חיבור לשרת, נסו שוב';
+      if (errorBox) errorBox.textContent = msg;
+      toast(msg);
+    }
+  }
+
+  function connectScreen() {
+    const input = h('input', { type: 'password', autocomplete: 'off', placeholder: 'קוד המשפחה', 'aria-label': 'קוד המשפחה' });
+    const err = h('div', { class: 'sheet-note', style: { color: '#d63b4d' } });
+    return h('div', { class: 'ob' },
+      h('div', { class: 'hero', html: Art.hero() }),
+      h('h1', null, 'ברוכים הבאים! 🎉'),
+      h('p', { class: 'lead' }, 'כדי שכל המשפחה תראה אותם נתונים בכל הטלפונים, הכניסו את קוד המשפחה. את הקוד מקבלים מההורים.'),
+      h('form', {
+        class: 'field',
+        onsubmit: (e) => { e.preventDefault(); err.textContent = ''; connectWith(input.value, err); },
+      }, input, err, h('button', { class: 'btn primary block', type: 'submit' }, 'התחברות')),
+      h('button', {
+        class: 'btn block', type: 'button', style: { marginTop: '12px' },
+        onclick: () => { try { sessionStorage.setItem('familypoints.localonly', '1'); } catch (e) { /* ignore */ } render(); },
+      }, 'בלי סנכרון, רק במכשיר הזה'));
+  }
+
+  function splash() {
+    return h('div', { class: 'ob' }, h('div', { class: 'hero', html: Art.hero() }), h('p', { class: 'lead' }, 'רגע, טוענים…'));
+  }
+
   /* ---------- ניתוב ורינדור ---------- */
   let lastRoute = null;
   function render() {
-    if (!S.state.onboarded) { $app.replaceChildren(onboarding()); return; }
+    if (!S.state.onboarded || !S.state.members.length) {
+      if (!Sync.ready) $app.replaceChildren(splash());
+      else if (Sync.available && !Sync.enabled && ss.get('familypoints.localonly') !== '1') $app.replaceChildren(connectScreen());
+      else $app.replaceChildren(onboarding());
+      return;
+    }
     if (ui.me && !S.member(ui.me)) ui.me = null;
     const route = location.hash.replace(/^#\/?/, '');
     const parts = route.split('/').filter(Boolean);
@@ -665,8 +754,10 @@
   }
 
   S.onChange(render);
+  Sync.onStatus(render);
   window.addEventListener('hashchange', render);
   render();
+  Sync.init().then(render);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* האפליקציה עובדת גם בלי */ });
