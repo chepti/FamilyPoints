@@ -58,6 +58,10 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+          # גרסה בכתובות הקבצים: דפדפנים ו-CDN מביאים קובץ חדש בכל פריסה
+          sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" index.html
+          grep -q "?v=${GITHUB_SHA::8}" index.html
+
           # רשימה סגורה של קבצים. בכוונה בלי api/config.php ובלי מחיקה של כלום בשרת.
           tar -czf - index.html sw.js manifest.webmanifest .htaccess css js icons \
               api/index.php api/config.sample.php api/.htaccess \
@@ -71,7 +75,14 @@ jobs:
         if: steps.check.outputs.ready == 'true'
         run: |
           set -euo pipefail
-          for f in "" js/app.js js/sync.js css/style.css manifest.webmanifest; do
-            curl -fsS -o /dev/null "$SITE_URL/$f"
+          V="${GITHUB_SHA::8}"
+          page=$(curl -fsS "$SITE_URL/")
+          grep -q "js/app.js?v=$V" <<<"$page" || { echo "::error::index.html on the site does not reference this build"; exit 1; }
+          # מה שהאתר (כולל ה-CDN) מגיש בפועל חייב להיות זהה לקבצים בריפו
+          for f in js/app.js js/sync.js js/store.js js/art.js css/style.css; do
+            curl -fsS "$SITE_URL/$f?v=$V" | cmp -s - "$f" || { echo "::error::$f served by the site differs from the repo"; exit 1; }
           done
-          curl -fsS -X POST "$SITE_URL/api/index.php?action=ping" | tee /dev/stderr | grep -q '"ok":true'
+          curl -fsS -o /dev/null "$SITE_URL/manifest.webmanifest"
+          ping=$(curl -fsS -X POST "$SITE_URL/api/index.php?action=ping")
+          echo "$ping"
+          grep -q '"ok":true' <<<"$ping"

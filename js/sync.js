@@ -11,6 +11,7 @@ const Sync = (() => {
   let key = lsGet(KEY_LS);
   let available = !!key;          // יש מפתח שמור = מניחים שהשרת קיים
   let ready = false;
+  let unreachable = false;        // אין תשובה מהשרת (רשת/5xx), לא אותו דבר כמו "אין שרת סנכרון"
   let status = key ? 'connecting' : 'off'; // off | connecting | ok | offline | auth
   let busy = false;
   let again = false;
@@ -83,12 +84,19 @@ const Sync = (() => {
 
   /* בודק פעם אחת אם יש שרת סנכרון מוגדר */
   async function init() {
+    unreachable = false;
     if (!key) {
-      try {
-        const r = await call('ping', {}, '');
-        available = !!r.configured;
-      } catch (e) {
+      if (location.protocol === 'file:') {
         available = false;
+      } else {
+        try {
+          const r = await call('ping', {}, '');
+          available = !!r.configured;
+        } catch (e) {
+          // 404/405/501 = אין שרת סנכרון בכתובת הזו (עבודה מקומית). כל כשל אחר זמני.
+          available = false;
+          unreachable = ![404, 405, 501].includes(e.status);
+        }
       }
     }
     ready = true;
@@ -130,6 +138,7 @@ const Sync = (() => {
     get available() { return available; },
     get enabled() { return enabled(); },
     get ready() { return ready; },
+    get unreachable() { return unreachable; },
     get status() { return status; },
   };
 })();

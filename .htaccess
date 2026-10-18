@@ -3,9 +3,10 @@
   AddType application/manifest+json .webmanifest
 </IfModule>
 
-# ה-Service Worker תמיד צריך להיבדק מחדש כדי שעדכונים יגיעו
+# קבצי קוד תמיד נבדקים מחדש מול השרת (ETag/304, זול), כדי שעדכונים יגיעו מיד.
+# בלי זה Hostinger מוסיף max-age של שבוע, וה-CDN והדפדפנים מגישים גרסה ישנה.
 <IfModule mod_headers.c>
-  <FilesMatch "^sw\.js$">
+  <FilesMatch "\.(html|js|css|webmanifest)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
 </IfModule>

@@ -782,6 +782,18 @@
       }, 'בלי סנכרון, רק במכשיר הזה'));
   }
 
+  function retryScreen() {
+    return h('div', { class: 'ob' },
+      h('div', { class: 'hero', html: Art.hero() }),
+      h('h1', null, 'אין חיבור לשרת'),
+      h('p', { class: 'lead' }, 'לא הצלחנו להגיע לשרת המשפחה. בדקו את החיבור ונסו שוב. אם תמשיכו בלי סנכרון, תיווצר משפחה נפרדת במכשיר הזה בלבד.'),
+      h('button', { class: 'btn primary block', type: 'button', onclick: () => { Sync.init().then(render); } }, 'נסו שוב'),
+      h('button', {
+        class: 'btn block', type: 'button', style: { marginTop: '12px' },
+        onclick: () => { try { sessionStorage.setItem('familypoints.localonly', '1'); } catch (e) { /* ignore */ } render(); },
+      }, 'בלי סנכרון, רק במכשיר הזה'));
+  }
+
   function splash() {
     return h('div', { class: 'ob' }, h('div', { class: 'hero', html: Art.hero() }), h('p', { class: 'lead' }, 'רגע, טוענים…'));
   }
@@ -791,6 +803,7 @@
   function render() {
     if (!S.state.onboarded || !S.state.members.length) {
       if (!Sync.ready) $app.replaceChildren(splash());
+      else if (Sync.unreachable && ss.get('familypoints.localonly') !== '1') $app.replaceChildren(retryScreen());
       else if (Sync.available && !Sync.enabled && ss.get('familypoints.localonly') !== '1') $app.replaceChildren(connectScreen());
       else $app.replaceChildren(onboarding());
       return;
