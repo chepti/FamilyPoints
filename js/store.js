@@ -189,6 +189,17 @@ const Store = (() => {
   const task = (id) => state.tasks.find((t) => t.id === id);
 
   function taskStatus(t, now = Date.now()) {
+    // "לפי צורך": תמיד פתוחה, בלי הגבלת פעמים. count = כמה פעמים סומנה החודש (להצגה בלבד)
+    if (t.period === 'any') {
+      const mk = periodKey('month', now);
+      const mine = state.completions.filter((c) => c.taskId === t.id);
+      return {
+        count: mine.filter((c) => periodKey('month', c.ts) === mk).length,
+        pending: mine.filter((c) => c.status === 'pending').length,
+        times: 1,
+        done: false,
+      };
+    }
     const key = periodKey(t.period, now);
     const live = state.completions.filter(
       (c) => c.taskId === t.id && periodKey(t.period, c.ts) === key

@@ -6,7 +6,7 @@
   const AVATARS = ['🦁', '🐯', '🐻', '🐼', '🐨', '🐸', '🐵', '🦊', '🐰', '🐱', '🐶', '🦄', '🐙', '🦋', '🐧', '🦉', '🐢', '🐳', '🦒', '🐘'];
   const COLORS = ['#e76f51', '#e9a23b', '#2a9d8f', '#5a8dee', '#9b6bd3', '#d66ba0', '#3aa6b9', '#6c9a5b', '#c2703d', '#7b8794'];
   const TASK_EMOJIS = ['🧹', '🧽', '🧺', '🧼', '🚿', '🛁', '🚽', '🗑️', '🍽️', '🍴', '🥣', '🛒', '👕', '🧦', '🛏️', '🪴', '🌿', '🐶', '🐱', '🐟', '🪟', '🚗', '📚', '🎒', '🧊', '🍳', '🥕', '📦', '🔧', '🪣', '🧴', '♻️', '🌀', '👟', '☀️', '🎈'];
-  const PERIODS = { day: 'יומי', week: 'שבועי', month: 'חודשי', year: 'שנתי', once: 'חד־פעמי' };
+  const PERIODS = { day: 'יומי', week: 'שבועי', month: 'חודשי', year: 'שנתי', any: 'לפי צורך', once: 'חד־פעמי' };
   const BOARDS = { week: 'השבוע', month: 'החודש', all: 'מאז ומעולם' };
 
   /* ---------- כלים ---------- */
@@ -119,6 +119,7 @@
 
   function freqLabel(t) {
     if (t.period === 'once') return 'חד־פעמי';
+    if (t.period === 'any') return 'לפי צורך';
     const unit = { day: 'ביום', week: 'בשבוע', month: 'בחודש', year: 'בשנה' }[t.period];
     return t.times === 1 ? `פעם ${unit}` : `${t.times} פעמים ${unit}`;
   }
@@ -384,7 +385,9 @@
         h('div', { class: 'task-meta' },
           h('span', { class: 'pill' }, freqLabel(t)),
           t.team && h('span', { class: 'pill team' }, icon('users', 13), 'אפשר ביחד'),
-          t.period !== 'once' && st.times > 1 && h('span', { class: 'pill' }, `${st.count}/${st.times}`)),
+          t.period !== 'once' && t.period !== 'any' && st.times > 1 && h('span', { class: 'pill' }, `${st.count}/${st.times}`),
+          t.period === 'any' && st.count > 0 && h('span', { class: 'pill' }, `${st.count} החודש`),
+          t.period === 'any' && st.pending > 0 && h('span', { class: 'pill' }, `${st.pending} ממתינים לאישור`)),
         assignees.length > 0 && h('div', { class: 'task-who' }, 'מיועד ל:', assignees.map((m) => avatar(m, 22)))),
       h('div', { class: 'task-side' },
         h('div', { class: 'pts' }, icon('star', 14, true), fmt(t.points)),
@@ -412,7 +415,7 @@
       .sort((a, b) => b.pts - a.pts);
     const max = Math.max(1, ...rows.map((r) => r.pts));
     const total = S.roundPts(rows.reduce((s, r) => s + r.pts, 0));
-    const open = S.state.tasks.filter((t) => !S.taskStatus(t).done).length;
+    const open = S.state.tasks.filter((t) => t.period !== 'any' && !S.taskStatus(t).done).length; // "לפי צורך" תמיד פתוחה, לא סופרים
     const pend = S.pending().length;
 
     // בטאבלט רחב: ימין = ציור וסיכום, שמאל = טבלת המובילים (ראו .home-grid ב-CSS)
@@ -644,7 +647,7 @@
           paint();
         },
       }, avatar(m, 28), m.name)));
-      timesField.style.display = d.period === 'once' ? 'none' : '';
+      timesField.style.display = d.period === 'once' || d.period === 'any' ? 'none' : '';
     }
 
     const body = h('div', null,
