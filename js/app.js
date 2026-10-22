@@ -228,6 +228,8 @@
       Sync.status === 'auth' && h('div', { class: 'warn' },
         'קוד המשפחה לא תקין (אולי הוחלף). היכנסו להורים ← הגדרות ← סנכרון והתחברו מחדש.'),
       h('main', { class: 'view', 'data-tab': active }, view),
+      h('footer', { class: 'site-foot' },
+        h('a', { href: 'https://chepti.com', target: '_blank', rel: 'noopener' }, 'חולמים תקשוב')),
       h('nav', { class: 'tabbar', 'aria-label': 'ניווט ראשי' },
         tabLink('#/', 'home', 'בית', 'home', active),
         tabLink('#/tasks', 'check', 'משימות', 'tasks', active),
@@ -305,7 +307,7 @@
           h('span', { class: 'pill' }, freqLabel(t)),
           t.team && h('span', { class: 'pill team' }, icon('users', 13), 'אפשר ביחד'),
           t.period !== 'once' && st.times > 1 && h('span', { class: 'pill' }, `${st.count}/${st.times}`)),
-        h('div', { class: 'task-who' }, assignees.length ? ['מיועד ל:', assignees.map((m) => avatar(m, 22))] : 'פתוח לכולם')),
+        assignees.length > 0 && h('div', { class: 'task-who' }, 'מיועד ל:', assignees.map((m) => avatar(m, 22)))),
       h('div', { class: 'task-side' },
         h('div', { class: 'pts' }, icon('star', 14, true), fmt(t.points)),
         st.done
@@ -364,12 +366,23 @@
     const openOnes = withStatus.filter((x) => !x.st.done).sort((a, b) => b.t.points - a.t.points);
     const doneOnes = withStatus.filter((x) => x.st.done);
 
+    // ב"הכל" מקבצים לפי תדירות (יומי, שבועי, חודשי, חד־פעמי), ובתוך כל קבוצה הכי שווה למעלה
+    const openList = () => {
+      if (ui.filter !== 'all') return h('div', { class: 'tasklist' }, openOnes.map((x) => taskCard(x.t)));
+      return Object.entries(PERIODS).map(([period, label]) => {
+        const items = openOnes.filter((x) => x.t.period === period);
+        return items.length > 0 && h('section', { class: 'task-group' },
+          h('div', { class: 'group-title' }, label, h('small', null, items.length)),
+          h('div', { class: 'tasklist' }, items.map((x) => taskCard(x.t))));
+      });
+    };
+
     return [
       h('div', { class: 'section-title' }, 'המשימות של הבית'),
       h('div', { class: 'chips' }, Object.entries(filters).map(([k, label]) =>
         h('button', { type: 'button', class: 'chip' + (ui.filter === k ? ' on' : ''), onclick: () => { ui.filter = k; render(); } }, label))),
       openOnes.length
-        ? h('div', { class: 'tasklist' }, openOnes.map((x) => taskCard(x.t)))
+        ? openList()
         : empty(S.state.tasks.length ? 'אין משימות פתוחות כאן. הכל נעשה.' : 'עוד אין משימות. ההורים מוסיפים אותן במסך ההורים.'),
       doneOnes.length > 0 && h('label', { class: 'check', style: { margin: '16px 4px' } },
         h('input', { type: 'checkbox', checked: ui.showDone, onchange: (e) => { ui.showDone = e.target.checked; render(); } }),

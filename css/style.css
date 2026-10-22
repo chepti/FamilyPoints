@@ -290,6 +290,18 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
 @keyframes pop { from { transform: translateY(8px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fall { to { transform: translateY(105vh) rotate(540deg); opacity: .9; } }
 
+/* ---------- קבוצות משימות ופוטר ---------- */
+.group-title {
+  display: flex; align-items: center; gap: 8px; margin: 22px 2px 10px; font-size: 16px; font-weight: 700; color: #5f6675;
+}
+.group-title::after { content: ''; flex: 1; order: 3; height: 1px; background: var(--line); }
+.group-title small { order: 2; font-weight: 500; color: var(--muted); font-size: 12.5px; background: #f0eadf; border-radius: 99px; padding: 1px 9px; }
+.task-group:first-of-type .group-title { margin-top: 8px; }
+
+.site-foot { text-align: center; margin: 34px 0 8px; font-size: 13px; color: var(--muted); }
+.site-foot a { display: inline-block; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .7); font-weight: 600; color: var(--muted); }
+.site-foot a:hover { color: var(--accent-d); border-color: var(--accent); }
+
 /* ---------- מסך צחצוח שיניים ---------- */
 .icon-btn {
   width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--ink);
@@ -390,15 +402,21 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
 /* ---------- טאבלט: קנבס רחב ---------- */
 @media (min-width: 768px) {
   body { font-size: 17px; }
-  .shell { max-width: 1180px; padding-inline: 28px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .shell { max-width: 1800px; padding-inline: 28px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  /* מסכי בית, אישי והורים נשארים בקריאות נוחה במרכז. משימות וצחצוח ממלאים את כל הרוחב */
+  .view[data-tab='home'], .view[data-tab='admin'] { max-width: 1240px; margin-inline: auto; }
   .top { padding-block: calc(18px + env(safe-area-inset-top)) 16px; }
   .brand { font-size: 22px; }
   .me-btn { min-height: 46px; }
   .btn { min-height: 50px; padding-inline: 20px; }
   .btn.small { min-height: 44px; }
   .btn.go { min-height: 46px; padding-inline: 22px; }
-  .tasklist { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .task { padding: 14px 16px; }
+  /* כרטיס משימה לרוחב מסך: למעלה סמל וטקסט, למטה ניקוד וכפתורים. כך הכותרת לא נדחסת */
+  .tasklist { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .task { padding: 14px 16px; flex-wrap: wrap; align-items: flex-start; }
+  .task-main { flex: 1 1 0; }
+  .task-side { order: 3; flex: 1 1 100%; flex-direction: row; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .done-note { max-width: none; text-align: start; }
   .task-emoji { width: 58px; height: 58px; font-size: 31px; }
   .task-title { font-size: 17px; }
   .section-title { font-size: 20px; }
@@ -440,10 +458,6 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
   .br-timer { position: sticky; top: 12px; }
 }
 
-/* שלוש עמודות רק כשיש מקום לכרטיס נוח (מסך גדול מאוד) */
-@media (min-width: 1500px) {
-  .view[data-tab='tasks'] .tasklist { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 /* בעמוד האישי העמודה צרה, לכן כרטיס אחד בשורה */
 .pv-main .tasklist { grid-template-columns: minmax(0, 1fr); }
 

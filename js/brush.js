@@ -77,6 +77,8 @@ const BrushScreen = (() => {
     const timer = { state: 'idle', left: TOTAL_MS, endsAt: 0, zone: 0, iv: null, lock: null, audio: null };
 
     const todayKey = () => S.periodKey('day', Date.now());
+    // הקטנים קודם: הפוך מסדר ההגדרה במסך ההורים (שם ההורים ראשונים)
+    const ordered = () => S.state.members.slice().reverse();
 
     /* ---------- צליל, רטט ומסך ער ---------- */
     const muted = () => { try { return localStorage.getItem('familypoints.mute') === '1'; } catch (e) { return false; } };
@@ -118,7 +120,7 @@ const BrushScreen = (() => {
       });
     }
     function zoneText() {
-      if (timer.state === 'idle') return 'שלוש דקות, 45 שניות לכל רבע';
+      if (timer.state === 'idle') return '';
       if (timer.state === 'done') return 'כל הפה נוקה';
       const z = ZONES[zoneOf(timer.left)].label;
       return (timer.state === 'paused' ? 'בהפסקה · ' : 'עכשיו: ') + z;
@@ -186,7 +188,7 @@ const BrushScreen = (() => {
       box.replaceChildren(
         h('div', { class: 'br-t-top' },
           h('div', { class: 'br-art', html: brushArt() }),
-          h('div', { class: 'br-t-title' }, h('h2', null, 'טיימר צחצוח'), h('span', null, '3 דקות · 4 רבעים')),
+          h('div', { class: 'br-t-title' }, h('h2', null, 'טיימר צחצוח')),
           h('button', {
             class: 'icon-btn', type: 'button', title: muted() ? 'להפעיל צלילים' : 'להשתיק צלילים',
             'aria-label': muted() ? 'להפעיל צלילים' : 'להשתיק צלילים',
@@ -234,7 +236,7 @@ const BrushScreen = (() => {
     }
 
     function step(dir) {
-      const ids = S.state.members.map((m) => m.id);
+      const ids = ordered().map((m) => m.id);
       const i = ids.indexOf(selId);
       const next = ids[(i + dir + ids.length) % ids.length];
       if (next) select(next);
@@ -271,7 +273,7 @@ const BrushScreen = (() => {
         const done = S.isBrushed(m.id, day, slot);
         if (done) {
           kids.push(
-            h('div', { class: 'br-done' }, icon('check', 24), `סומן צחצוח ${SLOTS[slot].label} ל${m.name}`),
+            h('div', { class: 'br-done' }, icon('check', 24), `צחצוח ${SLOTS[slot].label} סומן`),
             h('button', {
               class: 'btn small ghost', type: 'button',
               onclick: () => { S.setBrush(m.id, day, slot, false); toast('הסימון בוטל'); },
@@ -310,7 +312,7 @@ const BrushScreen = (() => {
 
     /* ---------- המסך ---------- */
     function view() {
-      const members = S.state.members;
+      const members = ordered();
       if (!members.some((m) => m.id === selId)) {
         selId = members.some((m) => m.id === ctx.me()) ? ctx.me() : (members[0] ? members[0].id : null);
       }
@@ -358,7 +360,6 @@ const BrushScreen = (() => {
               h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'הקודם', title: 'הקודם', onclick: () => step(-1) }, icon('chevR', 22)),
               els.track,
               h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'הבא', title: 'הבא', onclick: () => step(1) }, icon('chevL', 22))),
-            h('p', { class: 'br-hint' }, 'גוללים, לוחצים על עצמכם, ומסמנים אחרי הצחצוח'),
             els.action),
           els.timer),
       ];
