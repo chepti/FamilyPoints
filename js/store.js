@@ -28,6 +28,7 @@ const Store = (() => {
       members: [],
       tasks: [],
       completions: [],
+      brushes: [], // צחצוח שיניים: {id, memberId, day, slot: 'm'|'e', ts}
       settings: defaultSettings(),
       // מצב סנכרון: on = מחוברים לשרת, rev = הגרסה האחרונה שקיבלנו,
       // dirty = רשומות ששונו כאן ועוד לא נשלחו
@@ -78,8 +79,13 @@ const Store = (() => {
     s.n += 1;
     s.dirty[t + ':' + id] = { n: s.n, del };
   }
-  const listFor = (t) => (t === 'member' ? state.members : t === 'task' ? state.tasks : state.completions);
-  const lookup = (t, id) => (t === 'settings' ? state.settings : listFor(t).find((x) => x.id === id));
+  // סוג רשומה לא מוכר (מגרסה חדשה יותר של האפליקציה) מתעלמים ממנו, לא מערבבים אותו ברשימה אחרת
+  const listFor = (t) => ({ member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes }[t] || null);
+  const lookup = (t, id) => {
+    if (t === 'settings') return state.settings;
+    const list = listFor(t);
+    return list ? list.find((x) => x.id === id) : undefined;
+  };
   const byOrder = (a, b) => (a.o - b.o) || (a.id < b.id ? -1 : 1);
   const sortAll = () => { state.members.sort(byOrder); state.tasks.sort(byOrder); };
 
@@ -103,6 +109,7 @@ const Store = (() => {
       return;
     }
     const list = listFor(r.t);
+    if (!list) return;
     const i = list.findIndex((x) => x.id === r.id);
     if (r.del) { if (i >= 0) list.splice(i, 1); return; }
     if (i >= 0) list[i] = r.d; else list.push(r.d);
@@ -139,6 +146,7 @@ const Store = (() => {
     state.members.forEach((m) => mark('member', m.id));
     state.tasks.forEach((t) => mark('task', t.id));
     state.completions.forEach((c) => mark('completion', c.id));
+    state.brushes.forEach((b) => mark('brush', b.id));
     mark('settings', 'main');
     persist(false);
   }
@@ -291,6 +299,29 @@ const Store = (() => {
     save();
   }
 
+  /* ---------- צחצוח שיניים ---------- */
+  // מזהה קבוע לכל (בן משפחה, יום, בוקר/ערב): שני מכשירים שמסמנים אותו דבר לא יוצרים כפילות
+  const brushId = (memberId, day, slot) => `${memberId}_${day}_${slot}`;
+  const isBrushed = (memberId, day, slot) => state.brushes.some((b) => b.id === brushId(memberId, day, slot));
+
+  function setBrush(memberId, day, slot, on, now = Date.now()) {
+    const id = brushId(memberId, day, slot);
+    const i = state.brushes.findIndex((b) => b.id === id);
+    if (on) {
+      if (i >= 0) return;
+      state.brushes.push({ id, memberId, day, slot, ts: now });
+      mark('brush', id);
+    } else {
+      if (i < 0) return;
+      state.brushes.splice(i, 1);
+      mark('brush', id, true);
+    }
+    save();
+  }
+
+  // כמה שינויים מחכים לשליחה (לתצוגת "אין חיבור")
+  const pendingCount = () => Object.keys(state.sync.dirty).length;
+
   function setSettings(patch) {
     Object.assign(state.settings, patch);
     mark('settings', 'main');
@@ -316,7 +347,7 @@ const Store = (() => {
         !Array.isArray(parsed.completions)) {
       throw new Error('הקובץ לא נראה כמו גיבוי של האפליקציה');
     }
-    const old = { member: state.members, task: state.tasks, completion: state.completions };
+    const old = { member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes };
     const sync = state.sync;
     const next = Object.assign(defaults(), parsed, {
       settings: Object.assign(defaultSettings(), parsed.settings || {}),
@@ -341,6 +372,7 @@ const Store = (() => {
       tomb('member', state.members);
       tomb('task', state.tasks);
       tomb('completion', state.completions);
+      tomb('brush', state.brushes);
     }
     state = defaults();
     state.sync = sync;
@@ -357,7 +389,8 @@ const Store = (() => {
     upsertMember, deleteMember, upsertTask, deleteTask,
     addSampleTasks, setSettings, finishOnboarding,
     exportJSON, importJSON, reset,
+    isBrushed, setBrush,
     // סנכרון
-    hasDirty, collectDirty, applySync, syncOn, markAllDirty, replaceFromRemote,
+    hasDirty, pendingCount, collectDirty, applySync, syncOn, markAllDirty, replaceFromRemote,
   };
 })();

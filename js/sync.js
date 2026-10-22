@@ -52,6 +52,8 @@ const Sync = (() => {
 
   async function syncNow() {
     if (!enabled() || status === 'auth') return;
+    // המכשיר יודע שאין רשת: לא מחכים 15 שניות ל-timeout. השינויים נשארים בתור וייצאו כשהרשת תחזור.
+    if (navigator.onLine === false) { setStatus('offline'); return; }
     if (busy) { again = true; return; }
     busy = true;
     try {
@@ -73,6 +75,7 @@ const Sync = (() => {
     setInterval(() => { if (!document.hidden) syncNow(); }, POLL_MS);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
     window.addEventListener('online', syncNow);
+    window.addEventListener('offline', () => setStatus('offline'));
     window.addEventListener('focus', syncNow);
     Store.onChange(() => {
       if (!enabled() || !Store.hasDirty()) return;

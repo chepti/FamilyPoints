@@ -38,6 +38,16 @@
     users: '<circle cx="9" cy="8.5" r="3.3"/><path d="M3 20c.4-3.6 2.9-5.5 6-5.5s5.6 1.9 6 5.5"/><path d="M16 5.4a3.3 3.3 0 0 1 0 6.2"/><path d="M18 14.8c1.9.7 3.1 2.4 3.4 5.2"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    tooth: '<path d="M12 5.2C13.2 4.2 14.4 3.7 15.8 3.7 18.1 3.7 20 5.5 20 8c0 2-.8 3.2-1.4 5-.6 2-.6 5-1.4 7.3-.3.9-1.4.8-1.7-.1-.5-1.4-.9-3.4-1.7-4.2-.5-.5-3.1-.5-3.6 0-.8.8-1.2 2.8-1.7 4.2-.3.9-1.4 1-1.7.1C6 18 6 15 5.4 13 4.8 11.2 4 10 4 8c0-2.5 1.9-4.3 4.2-4.3 1.4 0 2.6.5 3.8 1.5Z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    play: '<path d="M6 4.5v15l13-7.5z"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/>',
+    mute: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6M16 9l6 6"/>',
+    chevR: '<path d="m9 18 6-6-6-6"/>',
+    chevL: '<path d="m15 18-6-6 6-6"/>',
   };
   function icon(name, size = 20, fill = false) {
     return h('span', {
@@ -180,6 +190,7 @@
   }
 
   const SYNC_LABEL = { ok: 'מסונכרן', connecting: 'מתחבר…', offline: 'אין חיבור', auth: 'קוד שגוי' };
+  const Brush = BrushScreen.create({ h, S, avatar, icon, toast, burst, render: () => render(), me: () => ui.me });
   const SYNC_TEXT = {
     ok: 'מחוברים. שינויים מופיעים בכל המכשירים תוך כמה שניות.',
     connecting: 'מתחבר…',
@@ -189,10 +200,13 @@
   function syncChip() {
     if (!Sync.enabled) return null;
     const st = SYNC_LABEL[Sync.status] ? Sync.status : 'connecting';
+    const waiting = S.pendingCount();
+    const label = st === 'offline' && waiting > 0 ? `${SYNC_LABEL[st]} · ${waiting} ממתינים` : SYNC_LABEL[st];
     return h('button', {
-      class: 'sync-chip', type: 'button', title: 'מצב סנכרון בין המכשירים',
+      class: 'sync-chip', type: 'button',
+      title: st === 'offline' ? 'עובדים בלי רשת. השינויים נשמרים כאן ויישלחו כשהחיבור יחזור' : 'מצב סנכרון בין המכשירים',
       onclick: () => { Sync.syncNow(); },
-    }, h('span', { class: 'dot ' + st }), SYNC_LABEL[st]);
+    }, h('span', { class: 'dot ' + st }), label);
   }
 
   function tabLink(href, ico, label, key, active, badge) {
@@ -213,10 +227,11 @@
       !S.persistent && h('div', { class: 'warn' }, 'הדפדפן חוסם שמירה של נתונים (גלישה בסתר?). שינויים יימחקו ברענון.'),
       Sync.status === 'auth' && h('div', { class: 'warn' },
         'קוד המשפחה לא תקין (אולי הוחלף). היכנסו להורים ← הגדרות ← סנכרון והתחברו מחדש.'),
-      h('main', { class: 'view' }, view),
+      h('main', { class: 'view', 'data-tab': active }, view),
       h('nav', { class: 'tabbar', 'aria-label': 'ניווט ראשי' },
         tabLink('#/', 'home', 'בית', 'home', active),
         tabLink('#/tasks', 'check', 'משימות', 'tasks', active),
+        tabLink('#/brush', 'tooth', 'צחצוח', 'brush', active),
         tabLink('#/admin', 'shield', 'הורים', 'admin', active, S.pending().length)));
   }
 
@@ -316,27 +331,29 @@
     const open = S.state.tasks.filter((t) => !S.taskStatus(t).done).length;
     const pend = S.pending().length;
 
-    return [
-      h('div', { class: 'hero', html: Art.hero() }),
-      h('div', { class: 'summary' },
-        h('div', { class: 'stat' }, h('b', null, fmt(total)), h('span', null, 'נקודות למשפחה ' + BOARDS[ui.board])),
-        h('div', { class: 'stat' }, h('b', null, open), h('span', null, plural(open, 'משימה פתוחה', 'משימות פתוחות'))),
-        h('div', { class: 'stat' }, h('b', null, pend), h('span', null, 'מחכות לאישור'))),
-      h('div', { class: 'section-title' }, 'מי מוביל'),
-      h('div', { class: 'seg', role: 'tablist' }, Object.entries(BOARDS).map(([k, label]) =>
-        h('button', { type: 'button', class: ui.board === k ? 'on' : '', onclick: () => { ui.board = k; render(); } }, label))),
-      rows.length
-        ? h('ol', { class: 'board' }, rows.map((r) => {
-          const rank = rows.findIndex((x) => x.pts === r.pts);
-          return h('li', null, h('a', { class: 'row', href: '#/m/' + r.m.id },
-            h('span', { class: 'rank' + (r.pts > 0 && rank < 3 ? ' r' + (rank + 1) : '') }, rank + 1),
-            avatar(r.m, 44),
-            h('div', { class: 'info' }, h('div', { class: 'name' }, r.m.name),
-              h('div', { class: 'bar' }, h('i', { style: { width: (r.pts / max) * 100 + '%', background: r.m.color } }))),
-            h('div', { class: 'score' }, fmt(r.pts), h('small', null, 'נקודות'))));
-        }))
-        : empty('עוד אין בני משפחה. מוסיפים אותם במסך ההורים.'),
-    ];
+    // בטאבלט רחב: ימין = ציור וסיכום, שמאל = טבלת המובילים (ראו .home-grid ב-CSS)
+    return h('div', { class: 'home-grid' },
+      h('div', { class: 'home-side' },
+        h('div', { class: 'hero', html: Art.hero() }),
+        h('div', { class: 'summary' },
+          h('div', { class: 'stat' }, h('b', null, fmt(total)), h('span', null, 'נקודות למשפחה ' + BOARDS[ui.board])),
+          h('div', { class: 'stat' }, h('b', null, open), h('span', null, plural(open, 'משימה פתוחה', 'משימות פתוחות'))),
+          h('div', { class: 'stat' }, h('b', null, pend), h('span', null, 'מחכות לאישור')))),
+      h('div', { class: 'home-main' },
+        h('div', { class: 'section-title' }, 'מי מוביל'),
+        h('div', { class: 'seg', role: 'tablist' }, Object.entries(BOARDS).map(([k, label]) =>
+          h('button', { type: 'button', class: ui.board === k ? 'on' : '', onclick: () => { ui.board = k; render(); } }, label))),
+        rows.length
+          ? h('ol', { class: 'board' }, rows.map((r) => {
+            const rank = rows.findIndex((x) => x.pts === r.pts);
+            return h('li', null, h('a', { class: 'row', href: '#/m/' + r.m.id },
+              h('span', { class: 'rank' + (r.pts > 0 && rank < 3 ? ' r' + (rank + 1) : '') }, rank + 1),
+              avatar(r.m, 44),
+              h('div', { class: 'info' }, h('div', { class: 'name' }, r.m.name),
+                h('div', { class: 'bar' }, h('i', { style: { width: (r.pts / max) * 100 + '%', background: r.m.color } }))),
+              h('div', { class: 'score' }, fmt(r.pts), h('small', null, 'נקודות'))));
+          }))
+          : empty('עוד אין בני משפחה. מוסיפים אותם במסך ההורים.')));
   }
 
   /* ---------- משימות ---------- */
@@ -381,17 +398,16 @@
     const approved = myComps.filter((c) => c.status === 'approved').slice(0, 8);
     const pre = [m.id];
 
-    return [
-      h('a', { class: 'back', href: '#/' }, '→ חזרה'),
-      h('div', { class: 'profile', style: { background: `linear-gradient(135deg, ${m.color}, color-mix(in srgb, ${m.color} 70%, #232a3b))` } },
-        avatar(m, 84),
-        h('h1', null, m.name),
-        h('div', { class: 'sub' }, `${m.role === 'parent' ? 'הורה' : 'ילד/ה'} · מקום ${rank} מתוך ${S.state.members.length} השבוע`),
-        h('div', { class: 'tiles' },
-          h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'week'))), h('span', null, 'השבוע')),
-          h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'month'))), h('span', null, 'החודש')),
-          h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'all'))), h('span', null, 'סה״כ')))),
+    const side = h('div', { class: 'profile', style: { background: `linear-gradient(135deg, ${m.color}, color-mix(in srgb, ${m.color} 70%, #232a3b))` } },
+      avatar(m, 84),
+      h('h1', null, m.name),
+      h('div', { class: 'sub' }, `${m.role === 'parent' ? 'הורה' : 'ילד/ה'} · מקום ${rank} מתוך ${S.state.members.length} השבוע`),
+      h('div', { class: 'tiles' },
+        h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'week'))), h('span', null, 'השבוע')),
+        h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'month'))), h('span', null, 'החודש')),
+        h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'all'))), h('span', null, 'סה״כ'))));
 
+    const main = [
       h('div', { class: 'section-title' }, 'המשימות שלי', h('small', null, mine.length)),
       mine.length ? h('div', { class: 'tasklist' }, mine.map((t) => taskCard(t, pre)))
         : h('div', { class: 'empty' }, mineDone.length ? 'סיימת את כל המשימות שלך.' : 'אין משימות שהוקצו אליך. אפשר לבחור מהפתוחות לכולם.'),
@@ -408,6 +424,11 @@
         h('div', { class: 'section-title' }, 'פעילות אחרונה'),
         h('div', { class: 'history' }, approved.map((c) => histRow(c))),
       ],
+    ];
+
+    return [
+      h('a', { class: 'back', href: '#/' }, '→ חזרה'),
+      h('div', { class: 'pv-grid' }, h('div', { class: 'pv-side' }, side), h('div', { class: 'pv-main' }, main)),
     ];
   }
 
@@ -697,7 +718,7 @@
       h('div', { class: 'tabs', role: 'tablist' }, tabs.map(([k, label]) =>
         h('button', { type: 'button', class: ui.adminTab === k ? 'on' : '', onclick: () => { ui.adminTab = k; render(); } },
           label, k === 'approvals' && pend > 0 && h('i', { class: 'badge' }, pend)))),
-      content,
+      h('div', { class: 'admin-grid' }, content),
     ];
   }
 
@@ -813,6 +834,7 @@
     const parts = route.split('/').filter(Boolean);
     let view; let tab;
     if (parts[0] === 'tasks') { view = tasksView(); tab = 'tasks'; }
+    else if (parts[0] === 'brush') { view = Brush.view(); tab = 'brush'; }
     else if (parts[0] === 'm' && S.member(parts[1])) { view = personalView(S.member(parts[1])); tab = 'home'; }
     else if (parts[0] === 'admin') { view = adminView(); tab = 'admin'; }
     else { view = homeView(); tab = 'home'; }
@@ -827,6 +849,9 @@
   window.addEventListener('hashchange', render);
   render();
   Sync.init().then(render);
+
+  // מבקשים מהדפדפן לא לפנות את הנתונים המקומיים כשחסר מקום (חשוב לעבודה בלי רשת)
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* האפליקציה עובדת גם בלי */ });

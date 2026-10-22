@@ -22,7 +22,7 @@ function out($code, $body)
     exit;
 }
 
-const RECORD_TYPES = ['member', 'task', 'completion', 'settings'];
+const RECORD_TYPES = ['member', 'task', 'completion', 'brush', 'settings'];
 const MAX_BODY = 2000000;
 const MAX_CHANGES = 5000;
 const MAX_RECORD = 20000;
