@@ -312,6 +312,12 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
 .group-title::after { content: ''; flex: 1; order: 3; height: 1px; background: var(--line); }
 .group-title small { order: 2; font-weight: 500; color: var(--muted); font-size: 12.5px; background: #f0eadf; border-radius: 99px; padding: 1px 9px; }
 .task-group:first-of-type .group-title { margin-top: 8px; }
+.group-title.person { color: var(--ink); font-size: 17px; }
+/* בתצוגת ערב שבת הכותרת כבר אומרת של מי המשימה ומהי התדירות, אז לא חוזרים על זה בכל כרטיס */
+.erev-view .task-meta .pill:first-child { display: none; }
+.by-person .task-who { display: none; }
+.chip.hot { border-color: var(--accent); color: var(--accent-d); position: relative; }
+.chip.hot::after { content: ''; position: absolute; top: -3px; inset-inline-start: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 
 .site-foot { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 34px 0 8px; font-size: 13px; color: var(--muted); }
 .site-foot a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .7); font-weight: 600; color: var(--muted); }

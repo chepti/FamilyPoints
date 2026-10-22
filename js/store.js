@@ -171,7 +171,8 @@ const Store = (() => {
   }
   function periodKey(period, ts) {
     const d = new Date(ts);
-    if (period === 'day') return dayKey(d);
+    // "ערב שבת" מתאפסת בכל יום: כל ערב (גם ערב חג באמצע השבוע) מקבל רשימה טרייה
+    if (period === 'day' || period === 'erev') return dayKey(d);
     if (period === 'week') return dayKey(weekStart(d));
     if (period === 'month') return monthKey(d);
     if (period === 'year') return String(d.getFullYear());

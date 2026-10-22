@@ -6,7 +6,9 @@
   const AVATARS = ['🦁', '🐯', '🐻', '🐼', '🐨', '🐸', '🐵', '🦊', '🐰', '🐱', '🐶', '🦄', '🐙', '🦋', '🐧', '🦉', '🐢', '🐳', '🦒', '🐘'];
   const COLORS = ['#e76f51', '#e9a23b', '#2a9d8f', '#5a8dee', '#9b6bd3', '#d66ba0', '#3aa6b9', '#6c9a5b', '#c2703d', '#7b8794'];
   const TASK_EMOJIS = ['🧹', '🧽', '🧺', '🧼', '🚿', '🛁', '🚽', '🗑️', '🍽️', '🍴', '🥣', '🛒', '👕', '🧦', '🛏️', '🪴', '🌿', '🐶', '🐱', '🐟', '🪟', '🚗', '📚', '🎒', '🧊', '🍳', '🥕', '📦', '🔧', '🪣', '🧴', '♻️', '🌀', '👟', '☀️', '🎈'];
-  const PERIODS = { day: 'יומי', week: 'שבועי', month: 'חודשי', year: 'שנתי', any: 'לפי צורך', once: 'חד־פעמי' };
+  const PERIODS = { day: 'יומי', week: 'שבועי', erev: 'ערב שבת', month: 'חודשי', year: 'שנתי', any: 'לפי צורך', once: 'חד־פעמי' };
+  // משימות שתמיד פתוחות או שמיועדות לאירוע מסוים לא נספרות כ"משימות פתוחות" בבית
+  const NOT_COUNTED = ['any', 'erev'];
   const BOARDS = { week: 'השבוע', month: 'החודש', all: 'מאז ומעולם' };
 
   /* ---------- כלים ---------- */
@@ -73,7 +75,9 @@
     adminTab: 'approvals',
     unlocked: ss.get('familypoints.unlocked') === '1',
     edit: false, // מצב עריכה בעמוד המשימות (הורים בלבד)
+    filterChosen: false, // האם בחרו מסנן ידנית (עד אז, ביום שישי נפתח ממוקד ב"ערב שבת")
   };
+  const isFriday = () => new Date().getDay() === 5;
 
   /* ---------- מצב הורה ---------- */
   // בלי קוד הורים מוגדר אין הגנה (כמו אזור ההורים). עם קוד: צריך להזין אותו פעם אחת בכל ביקור.
@@ -120,11 +124,12 @@
   function freqLabel(t) {
     if (t.period === 'once') return 'חד־פעמי';
     if (t.period === 'any') return 'לפי צורך';
+    if (t.period === 'erev') return 'ערב שבת וחג';
     const unit = { day: 'ביום', week: 'בשבוע', month: 'בחודש', year: 'בשנה' }[t.period];
     return t.times === 1 ? `פעם ${unit}` : `${t.times} פעמים ${unit}`;
   }
   function resetLabel(t) {
-    return { day: 'מתאפס מחר', week: 'מתאפס ביום ראשון', month: 'מתאפס ב-1 לחודש', year: 'מתאפס ב-1 בינואר', once: '' }[t.period];
+    return { day: 'מתאפס מחר', week: 'מתאפס ביום ראשון', month: 'מתאפס ב-1 לחודש', year: 'מתאפס ב-1 בינואר', erev: 'מתאפס מחר', any: '', once: '' }[t.period];
   }
 
   function when(ts) {
@@ -415,7 +420,7 @@
       .sort((a, b) => b.pts - a.pts);
     const max = Math.max(1, ...rows.map((r) => r.pts));
     const total = S.roundPts(rows.reduce((s, r) => s + r.pts, 0));
-    const open = S.state.tasks.filter((t) => t.period !== 'any' && !S.taskStatus(t).done).length; // "לפי צורך" תמיד פתוחה, לא סופרים
+    const open = S.state.tasks.filter((t) => !NOT_COUNTED.includes(t.period) && !S.taskStatus(t).done).length;
     const pend = S.pending().length;
 
     // בטאבלט רחב: ימין = ציור וסיכום, שמאל = טבלת המובילים (ראו .home-grid ב-CSS)
@@ -452,7 +457,10 @@
   function tasksView() {
     const editing = ui.edit && canAdmin();
     const filters = { all: 'הכל', ...PERIODS };
-    const list = S.state.tasks.filter((t) => ui.filter === 'all' || t.period === ui.filter);
+    // ביום שישי, אם יש משימות ערב שבת, המסך נפתח ממוקד בהן (עד שבוחרים מסנן אחר)
+    const hasErev = S.state.tasks.some((t) => t.period === 'erev');
+    const filter = !ui.filterChosen && isFriday() && hasErev ? 'erev' : ui.filter;
+    const list = S.state.tasks.filter((t) => filter === 'all' || t.period === filter);
     const withStatus = list.map((t) => ({ t, st: S.taskStatus(t) }));
     // במצב עריכה רואים את כל המשימות (גם שהושלמו), כדי שאפשר יהיה לערוך כל אחת
     const openOnes = withStatus.filter((x) => editing || !x.st.done).sort((a, b) => b.t.points - a.t.points);
@@ -460,8 +468,26 @@
     const card = (x) => taskCard(x.t, undefined, editing);
 
     // ב"הכל" מקבצים לפי תדירות (יומי, שבועי, חודשי, חד־פעמי), ובתוך כל קבוצה הכי שווה למעלה
+    // ערב שבת: הרשימה קבועה ומשויכת לאנשים, אז מקבצים לפי אדם (קטנים קודם), ומה שמשותף או פתוח לכולם בסוף
+    const erevByPerson = () => {
+      const claimed = new Set();
+      const sections = S.state.members.slice().reverse().map((m) => {
+        const items = openOnes.filter((x) => x.t.assignees.length === 1 && x.t.assignees[0] === m.id);
+        items.forEach((x) => claimed.add(x.t.id));
+        return items.length > 0 && h('section', { class: 'task-group erev-view by-person' },
+          h('div', { class: 'group-title person' }, avatar(m, 26), m.name, h('small', null, items.length)),
+          h('div', { class: 'tasklist' }, items.map(card)));
+      });
+      const rest = openOnes.filter((x) => !claimed.has(x.t.id));
+      sections.push(rest.length > 0 && h('section', { class: 'task-group erev-view' },
+        h('div', { class: 'group-title' }, 'משותף / פתוח לכולם', h('small', null, rest.length)),
+        h('div', { class: 'tasklist' }, rest.map(card))));
+      return sections;
+    };
+
     const openList = () => {
-      if (ui.filter !== 'all') return h('div', { class: 'tasklist' }, openOnes.map(card));
+      if (filter === 'erev') return erevByPerson();
+      if (filter !== 'all') return h('div', { class: 'tasklist' }, openOnes.map(card));
       return Object.entries(PERIODS).map(([period, label]) => {
         const items = openOnes.filter((x) => x.t.period === period);
         return items.length > 0 && h('section', { class: 'task-group' },
@@ -481,7 +507,11 @@
             title: editing ? 'חזרה לתצוגה רגילה' : 'מצב עריכה להורים', onclick: toggleEdit,
           }, icon(editing ? 'check' : 'pencil', 16), editing ? 'סיום עריכה' : 'עריכה'))),
       h('div', { class: 'chips' }, Object.entries(filters).map(([k, label]) =>
-        h('button', { type: 'button', class: 'chip' + (ui.filter === k ? ' on' : ''), onclick: () => { ui.filter = k; render(); } }, label))),
+        h('button', {
+          type: 'button', title: k === 'erev' ? 'גם לערבי חג' : null,
+          class: 'chip' + (filter === k ? ' on' : '') + (k === 'erev' && hasErev && isFriday() && filter !== 'erev' ? ' hot' : ''),
+          onclick: () => { ui.filter = k; ui.filterChosen = true; render(); },
+        }, label))),
       openOnes.length
         ? openList()
         : empty(S.state.tasks.length ? 'אין משימות פתוחות כאן. הכל נעשה.' : 'עוד אין משימות. הורים מוסיפים אותן במצב עריכה.'),
@@ -647,7 +677,7 @@
           paint();
         },
       }, avatar(m, 28), m.name)));
-      timesField.style.display = d.period === 'once' || d.period === 'any' ? 'none' : '';
+      timesField.style.display = ['once', 'any', 'erev'].includes(d.period) ? 'none' : '';
     }
 
     const body = h('div', null,
@@ -681,6 +711,7 @@
             d.title = d.title.trim();
             d.points = Number(d.points);
             d.times = Math.max(1, Math.round(Number(d.times) || 1));
+            if (['once', 'any', 'erev'].includes(d.period)) d.times = 1; // לתדירויות האלה "כמה פעמים" לא רלוונטי
             if (!d.title) return toast('חסר שם למשימה');
             if (!(d.points > 0)) return toast('הניקוד צריך להיות גדול מ-0');
             S.upsertTask(d);
