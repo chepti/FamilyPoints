@@ -76,19 +76,23 @@ jobs:
         run: |
           set -euo pipefail
           V="${GITHUB_SHA::8}"
-          # ה-CDN יכול להגיש את ה-index.html הישן כמה שניות אחרי ההעלאה, אז מנסים שוב לפני שנכשלים
+          # מה שהאתר (כולל ה-CDN) מגיש בפועל חייב להיות זהה לקבצים בריפו.
+          # ה-CDN יכול להגיש גרסה ישנה כמה שניות אחרי ההעלאה, אז מנסים שוב לפני שנכשלים.
+          verify() {
+            local page f
+            page=$(curl -fsS "$SITE_URL/") || return 1
+            grep -q "js/app.js?v=$V" <<<"$page" || { echo "index.html does not reference this build yet"; return 1; }
+            for f in js/app.js js/sync.js js/store.js js/art.js js/brush.js css/style.css; do
+              curl -fsS "$SITE_URL/$f?v=$V" | cmp -s - "$f" || { echo "$f served by the site differs from the repo yet"; return 1; }
+            done
+          }
           ok=0
-          for i in 1 2 3 4 5 6; do
-            page=$(curl -fsS "$SITE_URL/")
-            if grep -q "js/app.js?v=$V" <<<"$page"; then ok=1; break; fi
-            echo "index.html does not reference this build yet (attempt $i), waiting..."
-            sleep 5
+          for i in 1 2 3 4 5 6 7 8; do
+            if verify; then ok=1; break; fi
+            echo "attempt $i failed, waiting for the CDN..."
+            sleep 6
           done
-          [ "$ok" = 1 ] || { echo "::error::index.html on the site does not reference this build"; exit 1; }
-          # מה שהאתר (כולל ה-CDN) מגיש בפועל חייב להיות זהה לקבצים בריפו
-          for f in js/app.js js/sync.js js/store.js js/art.js js/brush.js css/style.css; do
-            curl -fsS "$SITE_URL/$f?v=$V" | cmp -s - "$f" || { echo "::error::$f served by the site differs from the repo"; exit 1; }
-          done
+          [ "$ok" = 1 ] || { echo "::error::the site does not serve this build (index.html or js/css differ from the repo)"; exit 1; }
           curl -fsS -o /dev/null "$SITE_URL/manifest.webmanifest"
           ping=$(curl -fsS -X POST "$SITE_URL/api/index.php?action=ping")
           echo "$ping"
