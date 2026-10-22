@@ -9,6 +9,10 @@
   - `js/brush.js`: מסך צחצוח שיניים (קרוסלת בני משפחה, חלונות בוקר 6:00–10:00 וערב 18:00–24:00, טיימר 3 דקות). נטען לפני `app.js`, ומקבל ממנו את כלי ה-UI דרך `BrushScreen.create(ctx)`.
 - סוגי רשומות בסנכרון: `member`, `task`, `completion`, `brush`, `settings`. **סוג חדש חייב להיכנס גם ל-`RECORD_TYPES` ב-`api/index.php`**, אחרת השרת מתעלם ממנו בשקט. ב-`store.js` `listFor` מתעלם מסוג לא מוכר (לא לערבב אותו ברשימה אחרת).
 - רשומת צחצוח: `id = memberId_YYYY-MM-DD_m|e` (מזהה קבוע, אז סימון כפול משני מכשירים לא יוצר כפילות). ביטול סימון = מצבת.
+- מצב הורה: `canAdmin()` = אין קוד הורים מוגדר, או שהוזן בביקור הזה (`ui.unlocked`, ב-sessionStorage). מצב עריכה בעמוד המשימות (`ui.edit`) ו"הוספת נקודות" דורשים אותו דרך `requireParent()`. שדות קוד/סיסמה בטפסים כוללים שדה username נסתר קבוע (`hiddenUser()`), כי כל האפליקציות ב-chepti.com חולקות origin והדפדפן מערבב סיסמאות.
+- נקודות ידניות מההורים: רשומת `completion` עם `taskId: 'bonus'`, בלי emoji (מוצג כוכב SVG), מאושרת מיד (`Store.addBonus`).
+- תדירויות: day, week, month, **year** (מפתח התקופה = השנה הקלנדרית, מתאפס ב-1 בינואר), once.
+- חלוניות (`sheet()` ב-`app.js`): נסגרות בלחיצה על הרקע רק אם גם ה-pointerdown היה על הרקע; Escape משפיע רק על העליונה; `opts.dirty` מונע סגירה בטעות וגורם ל-X/Escape לבקש אישור. עורך משימה חדשה שומר טיוטה ב-localStorage (`familypoints.draft.task`, עד שעתיים). לא להחזיר `onclick` ישיר על ה-overlay.
 - פריסה לטאבלט: `@media (min-width: 768px)` מרחיב ל-2 עמודות, ו-`(min-width: 900px)` מעביר את הניווט לצד (ימין, ב-RTL). לא להוסיף כרטיסי משימה ב-3 עמודות מתחת ל-1500px: הם נדחסים.
 - `api/index.php`: שרת הסנכרון (PHP 7.4+, קובץ JSON עם נעילה). `api/config.php` קיים רק בשרת.
 - `sw.js`, `manifest.webmanifest`: PWA. `.htaccess`: הגדרות Apache/LiteSpeed בשרת.

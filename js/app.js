@@ -6,7 +6,7 @@
   const AVATARS = ['🦁', '🐯', '🐻', '🐼', '🐨', '🐸', '🐵', '🦊', '🐰', '🐱', '🐶', '🦄', '🐙', '🦋', '🐧', '🦉', '🐢', '🐳', '🦒', '🐘'];
   const COLORS = ['#e76f51', '#e9a23b', '#2a9d8f', '#5a8dee', '#9b6bd3', '#d66ba0', '#3aa6b9', '#6c9a5b', '#c2703d', '#7b8794'];
   const TASK_EMOJIS = ['🧹', '🧽', '🧺', '🧼', '🚿', '🛁', '🚽', '🗑️', '🍽️', '🍴', '🥣', '🛒', '👕', '🧦', '🛏️', '🪴', '🌿', '🐶', '🐱', '🐟', '🪟', '🚗', '📚', '🎒', '🧊', '🍳', '🥕', '📦', '🔧', '🪣', '🧴', '♻️', '🌀', '👟', '☀️', '🎈'];
-  const PERIODS = { day: 'יומי', week: 'שבועי', month: 'חודשי', once: 'חד־פעמי' };
+  const PERIODS = { day: 'יומי', week: 'שבועי', month: 'חודשי', year: 'שנתי', once: 'חד־פעמי' };
   const BOARDS = { week: 'השבוע', month: 'החודש', all: 'מאז ומעולם' };
 
   /* ---------- כלים ---------- */
@@ -47,6 +47,7 @@
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/>',
     mute: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6M16 9l6 6"/>',
     mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
     chevR: '<path d="m9 18 6-6-6-6"/>',
     chevL: '<path d="m15 18-6-6 6-6"/>',
   };
@@ -71,7 +72,37 @@
     showDone: false,
     adminTab: 'approvals',
     unlocked: ss.get('familypoints.unlocked') === '1',
+    edit: false, // מצב עריכה בעמוד המשימות (הורים בלבד)
   };
+
+  /* ---------- מצב הורה ---------- */
+  // בלי קוד הורים מוגדר אין הגנה (כמו אזור ההורים). עם קוד: צריך להזין אותו פעם אחת בכל ביקור.
+  const canAdmin = () => !S.state.settings.pin || ui.unlocked;
+  function unlock() { ui.unlocked = true; ss.set('familypoints.unlocked', '1'); }
+  // שדה שם משתמש נסתר קבוע, כדי שהדפדפן לא יערבב את הקוד עם סיסמאות אחרות של chepti.com
+  const hiddenUser = () => h('input', {
+    type: 'text', name: 'username', autocomplete: 'username', value: 'familypoints', readonly: true, tabindex: '-1', style: { display: 'none' },
+  });
+
+  function requireParent(then) {
+    if (canAdmin()) { then(); return; }
+    const input = h('input', {
+      type: 'password', inputmode: 'numeric', autocomplete: 'current-password', maxlength: '8',
+      placeholder: '••••', 'aria-label': 'קוד הורים', class: 'pin-input',
+    });
+    const sh = sheet('קוד הורים', h('form', {
+      onsubmit: (e) => {
+        e.preventDefault();
+        if (input.value === S.state.settings.pin) { unlock(); sh.close(); then(); }
+        else { toast('קוד שגוי'); input.value = ''; input.focus(); }
+      },
+    },
+    hiddenUser(), input,
+    h('div', { class: 'sheet-actions' },
+      h('button', { class: 'btn', type: 'button', onclick: () => sh.close() }, 'ביטול'),
+      h('button', { class: 'btn primary', type: 'submit' }, 'כניסה'))));
+    setTimeout(() => input.focus(), 60);
+  }
 
   const fmt = (n) => String(S.roundPts(n));
   const plural = (n, one, many) => (n === 1 ? one : many);
@@ -88,11 +119,11 @@
 
   function freqLabel(t) {
     if (t.period === 'once') return 'חד־פעמי';
-    const unit = { day: 'ביום', week: 'בשבוע', month: 'בחודש' }[t.period];
+    const unit = { day: 'ביום', week: 'בשבוע', month: 'בחודש', year: 'בשנה' }[t.period];
     return t.times === 1 ? `פעם ${unit}` : `${t.times} פעמים ${unit}`;
   }
   function resetLabel(t) {
-    return { day: 'מתאפס מחר', week: 'מתאפס ביום ראשון', month: 'מתאפס ב-1 לחודש', once: '' }[t.period];
+    return { day: 'מתאפס מחר', week: 'מתאפס ביום ראשון', month: 'מתאפס ב-1 לחודש', year: 'מתאפס ב-1 בינואר', once: '' }[t.period];
   }
 
   function when(ts) {
@@ -133,32 +164,71 @@
     setTimeout(() => wrap.remove(), 3000);
   }
 
-  function sheet(title, content) {
-    const overlay = h('div', { class: 'overlay', onclick: (e) => { if (e.target === overlay) close(); } });
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+  /* חלונית קופצת. יציבות:
+   * - נסגרת בלחיצה על הרקע רק אם גם הלחיצה התחילה על הרקע (גרירת בחירת טקסט שנגמרת מחוץ לחלונית לא סוגרת)
+   * - Escape ולחיצה על הרקע משפיעים רק על החלונית העליונה (אישור מעל עורך לא סוגר את שניהם)
+   * - opts.dirty(): אם יש שינויים שלא נשמרו, הרקע לא סוגר, ו-X/Escape מבקשים אישור
+   * - opts.onDismiss(): נקרא כשהחלונית נסגרת בכל דרך (למשל כדי לשחרר הבטחה שמחכה לה) */
+  const sheetStack = [];
+  function sheet(title, content, opts = {}) {
+    const overlay = h('div', { class: 'overlay' });
+    const token = {};
+    let downOnBackdrop = false;
+    const isTop = () => sheetStack[sheetStack.length - 1] === token;
+
     function close() {
+      if (!overlay.isConnected) return;
       overlay.remove();
       document.removeEventListener('keydown', onKey);
+      const i = sheetStack.indexOf(token);
+      if (i >= 0) sheetStack.splice(i, 1);
+      if (opts.onDismiss) opts.onDismiss();
     }
+    async function attemptClose() {
+      if (opts.dirty && opts.dirty()) {
+        if (!(await askConfirm('לסגור בלי לשמור? מה שמילאתם יימחק.', 'כן, לסגור'))) return;
+        if (opts.onDiscard) opts.onDiscard();
+      }
+      close();
+    }
+    const onKey = (e) => { if (e.key === 'Escape' && isTop()) attemptClose(); };
+
+    overlay.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === overlay; });
+    overlay.addEventListener('click', (e) => {
+      const real = e.target === overlay && downOnBackdrop;
+      downOnBackdrop = false;
+      if (!real || !isTop()) return;
+      if (opts.dirty && opts.dirty()) { // יש מה לאבד: לא סוגרים בטעות, רק רועדים
+        const box = overlay.querySelector('.sheet');
+        box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
+        return;
+      }
+      close();
+    });
+
     overlay.append(h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'sheet-head' },
         h('h2', null, title),
-        h('button', { class: 'x', type: 'button', 'aria-label': 'סגירה', onclick: close }, '✕')),
+        h('button', { class: 'x', type: 'button', 'aria-label': 'סגירה', onclick: attemptClose }, '✕')),
       content));
     document.body.append(overlay);
     document.addEventListener('keydown', onKey);
-    return { close };
+    sheetStack.push(token);
+    return { close, root: overlay };
   }
 
   function askConfirm(message, okLabel = 'כן, למחוק') {
     return new Promise((resolve) => {
       let sh;
-      const done = (v) => { sh.close(); resolve(v); };
+      let settled = false;
+      const settle = (v) => { if (!settled) { settled = true; resolve(v); } };
+      const done = (v) => { settle(v); sh.close(); };
       sh = sheet('בטוחים?', h('div', null,
         h('p', { style: { margin: '4px 0 0', fontSize: '17px' } }, message),
         h('div', { class: 'sheet-actions' },
           h('button', { class: 'btn', type: 'button', onclick: () => done(false) }, 'ביטול'),
-          h('button', { class: 'btn danger', type: 'button', onclick: () => done(true) }, okLabel))));
+          h('button', { class: 'btn danger', type: 'button', onclick: () => done(true) }, okLabel))),
+      { onDismiss: () => settle(false) });
     });
   }
 
@@ -300,11 +370,14 @@
   }
 
   /* ---------- כרטיס משימה ---------- */
-  function taskCard(t, preselect) {
+  function taskCard(t, preselect, editing = false) {
     const st = S.taskStatus(t);
     const assignees = t.assignees.map(S.member).filter(Boolean);
     const who = actor(preselect);
-    return h('div', { class: 'task' + (st.done ? ' done' : '') },
+    return h('div', {
+      class: 'task' + (st.done ? ' done' : '') + (editing ? ' editing' : ''),
+      onclick: editing ? () => openTaskEditor(t) : null,
+    },
       h('div', { class: 'task-emoji', 'aria-hidden': 'true' }, t.emoji),
       h('div', { class: 'task-main' },
         h('div', { class: 'task-title' }, t.title),
@@ -315,7 +388,11 @@
         assignees.length > 0 && h('div', { class: 'task-who' }, 'מיועד ל:', assignees.map((m) => avatar(m, 22)))),
       h('div', { class: 'task-side' },
         h('div', { class: 'pts' }, icon('star', 14, true), fmt(t.points)),
-        st.done
+        editing
+          ? h('button', {
+            class: 'btn small', type: 'button', onclick: (e) => { e.stopPropagation(); openTaskEditor(t); },
+          }, icon('pencil', 16), 'עריכה')
+          : st.done
           ? h('div', { class: 'done-note' }, icon('check', 14), st.pending ? ' ממתין לאישור' : ' בוצע', resetLabel(t) ? ' · ' + resetLabel(t) : '')
           : h('div', { class: 'task-actions' },
             t.team && h('button', {
@@ -364,42 +441,60 @@
   }
 
   /* ---------- משימות ---------- */
+  function toggleEdit() {
+    if (ui.edit) { ui.edit = false; render(); return; }
+    requireParent(() => { ui.edit = true; render(); });
+  }
+
   function tasksView() {
+    const editing = ui.edit && canAdmin();
     const filters = { all: 'הכל', ...PERIODS };
     const list = S.state.tasks.filter((t) => ui.filter === 'all' || t.period === ui.filter);
     const withStatus = list.map((t) => ({ t, st: S.taskStatus(t) }));
-    const openOnes = withStatus.filter((x) => !x.st.done).sort((a, b) => b.t.points - a.t.points);
-    const doneOnes = withStatus.filter((x) => x.st.done);
+    // במצב עריכה רואים את כל המשימות (גם שהושלמו), כדי שאפשר יהיה לערוך כל אחת
+    const openOnes = withStatus.filter((x) => editing || !x.st.done).sort((a, b) => b.t.points - a.t.points);
+    const doneOnes = editing ? [] : withStatus.filter((x) => x.st.done);
+    const card = (x) => taskCard(x.t, undefined, editing);
 
     // ב"הכל" מקבצים לפי תדירות (יומי, שבועי, חודשי, חד־פעמי), ובתוך כל קבוצה הכי שווה למעלה
     const openList = () => {
-      if (ui.filter !== 'all') return h('div', { class: 'tasklist' }, openOnes.map((x) => taskCard(x.t)));
+      if (ui.filter !== 'all') return h('div', { class: 'tasklist' }, openOnes.map(card));
       return Object.entries(PERIODS).map(([period, label]) => {
         const items = openOnes.filter((x) => x.t.period === period);
         return items.length > 0 && h('section', { class: 'task-group' },
           h('div', { class: 'group-title' }, label, h('small', null, items.length)),
-          h('div', { class: 'tasklist' }, items.map((x) => taskCard(x.t))));
+          h('div', { class: 'tasklist' }, items.map(card)));
       });
     };
 
     return [
-      h('div', { class: 'section-title' }, 'המשימות של הבית'),
+      h('div', { class: 'page-head' },
+        h('div', { class: 'section-title' }, 'המשימות של הבית'),
+        h('div', { class: 'head-actions' },
+          editing && h('button', { class: 'btn small primary', type: 'button', onclick: () => openTaskEditor() }, icon('plus', 18), 'משימה חדשה'),
+          editing && h('button', { class: 'btn small', type: 'button', onclick: () => openBonus() }, icon('star', 16), 'הוספת נקודות'),
+          h('button', {
+            class: 'btn small' + (editing ? ' on' : ''), type: 'button', 'aria-pressed': editing ? 'true' : 'false',
+            title: editing ? 'חזרה לתצוגה רגילה' : 'מצב עריכה להורים', onclick: toggleEdit,
+          }, icon(editing ? 'check' : 'pencil', 16), editing ? 'סיום עריכה' : 'עריכה'))),
       h('div', { class: 'chips' }, Object.entries(filters).map(([k, label]) =>
         h('button', { type: 'button', class: 'chip' + (ui.filter === k ? ' on' : ''), onclick: () => { ui.filter = k; render(); } }, label))),
       openOnes.length
         ? openList()
-        : empty(S.state.tasks.length ? 'אין משימות פתוחות כאן. הכל נעשה.' : 'עוד אין משימות. ההורים מוסיפים אותן במסך ההורים.'),
+        : empty(S.state.tasks.length ? 'אין משימות פתוחות כאן. הכל נעשה.' : 'עוד אין משימות. הורים מוסיפים אותן במצב עריכה.'),
       doneOnes.length > 0 && h('label', { class: 'check', style: { margin: '16px 4px' } },
         h('input', { type: 'checkbox', checked: ui.showDone, onchange: (e) => { ui.showDone = e.target.checked; render(); } }),
         `הצג גם ${doneOnes.length} ${plural(doneOnes.length, 'משימה שהושלמה', 'משימות שהושלמו')}`),
-      ui.showDone && doneOnes.length > 0 && h('div', { class: 'tasklist' }, doneOnes.map((x) => taskCard(x.t))),
+      ui.showDone && doneOnes.length > 0 && h('div', { class: 'tasklist' }, doneOnes.map(card)),
     ];
   }
 
   /* ---------- עמוד אישי ---------- */
+  // נקודות ידניות מההורים אין להן סמל משימה: מציגים כוכב
+  const compIcon = (c) => (c.emoji ? c.emoji : h('span', { class: 'bonus-ico' }, icon('star', 22, true)));
   function histRow(c, extra) {
     return h('div', { class: 'hist' + (c.status === 'pending' ? ' pending' : '') },
-      h('span', { class: 'e' }, c.emoji),
+      h('span', { class: 'e' }, compIcon(c)),
       h('div', { class: 't' }, c.title,
         h('small', null, `${when(c.ts)}${c.members.length > 1 ? ' · ביחד עם ' + (c.members.length - 1) : ''}`)),
       h('b', { dir: 'ltr' }, '+' + fmt(c.pointsEach)), extra);
@@ -423,7 +518,9 @@
       h('div', { class: 'tiles' },
         h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'week'))), h('span', null, 'השבוע')),
         h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'month'))), h('span', null, 'החודש')),
-        h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'all'))), h('span', null, 'סה״כ'))));
+        h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'all'))), h('span', null, 'סה״כ'))),
+      // רק להורה שהזין את הקוד בביקור הזה
+      ui.unlocked && h('button', { class: 'btn small bonus-btn', type: 'button', onclick: () => openBonus(m.id) }, icon('star', 16), 'הוספת נקודות'));
 
     const main = [
       h('div', { class: 'section-title' }, 'המשימות שלי', h('small', null, mine.length)),
@@ -451,10 +548,79 @@
   }
 
   /* ---------- עורכים ---------- */
+  // טיוטת משימה חדשה נשמרת תוך כדי כתיבה, כדי שרענון או סגירה בטעות לא ימחקו את מה שהוקלד
+  const DRAFT_KEY = 'familypoints.draft.task';
+  const blankTask = () => ({ id: S.uid(), title: '', emoji: '🧹', points: 5, period: 'week', times: 1, assignees: [], team: false });
+  function loadDraft() {
+    try {
+      const x = JSON.parse(ls.get(DRAFT_KEY) || 'null');
+      if (x && x.d && Date.now() - x.ts < 2 * 3600 * 1000) return x.d;
+    } catch (e) { /* אין טיוטה */ }
+    return null;
+  }
+  const saveDraft = (d) => ls.set(DRAFT_KEY, JSON.stringify({ ts: Date.now(), d }));
+  const clearDraft = () => ls.set(DRAFT_KEY, '');
+
+  // הוספת נקודות ידנית לילד/ה (בונוס, מאושר מיד). קוראים לה רק אחרי requireParent / מתוך אזור ההורים
+  function openBonus(preId) {
+    const members = S.state.members;
+    const sel = { id: S.member(preId) ? preId : null, pts: 5, reason: '' };
+    const chips = h('div', { class: 'chips' });
+    const note = h('div', { class: 'sheet-note' });
+    const pointsInput = h('input', {
+      type: 'number', min: '1', max: '500', step: '1', value: sel.pts, 'aria-label': 'כמה נקודות',
+      oninput: (e) => { sel.pts = Number(e.target.value); paint(); },
+    });
+    const quick = h('div', { class: 'chips' });
+    const ok = h('button', {
+      class: 'btn primary', type: 'button',
+      onclick: () => {
+        const c = S.addBonus(sel.id, sel.pts, sel.reason);
+        if (!c) return;
+        sh.close();
+        burst();
+        toast(`נוספו ${fmt(c.pointsEach)} נקודות ל${S.member(sel.id).name}`, { label: 'ביטול', fn: () => S.removeCompletion(c.id) });
+      },
+    }, 'הוספה');
+
+    function paint() {
+      chips.replaceChildren(...members.map((m) => h('button', {
+        type: 'button', class: 'chip avatar-chip' + (sel.id === m.id ? ' on' : ''),
+        onclick: () => { sel.id = m.id; paint(); },
+      }, avatar(m, 28), m.name)));
+      quick.replaceChildren(...[1, 5, 10, 20].map((n) => h('button', {
+        type: 'button', class: 'chip' + (sel.pts === n ? ' on' : ''),
+        onclick: () => { sel.pts = n; pointsInput.value = n; paint(); },
+      }, '+' + n)));
+      const valid = !!sel.id && sel.pts > 0 && sel.pts <= 500;
+      ok.disabled = !valid;
+      note.textContent = !sel.id ? 'בחרו למי להוסיף' : !(sel.pts > 0) ? 'הכניסו מספר נקודות'
+        : `${S.member(sel.id).name} יקבל/תקבל ${fmt(sel.pts)} נקודות מיד`;
+    }
+
+    const sh = sheet('הוספת נקודות', h('div', null,
+      h('div', { class: 'field' }, h('label', null, 'למי?'), chips),
+      h('div', { class: 'field' }, h('label', null, 'כמה נקודות?'),
+        h('div', { class: 'stepper' },
+          h('button', { type: 'button', 'aria-label': 'פחות', onclick: () => { sel.pts = Math.max(1, (Number(sel.pts) || 1) - 1); pointsInput.value = sel.pts; paint(); } }, '−'),
+          pointsInput,
+          h('button', { type: 'button', 'aria-label': 'יותר', onclick: () => { sel.pts = (Number(sel.pts) || 0) + 1; pointsInput.value = sel.pts; paint(); } }, '+')),
+        quick),
+      h('div', { class: 'field' }, h('label', null, 'על מה?'),
+        h('input', { type: 'text', maxlength: '40', placeholder: 'לא חובה, למשל: עזרה מיוחדת', oninput: (e) => { sel.reason = e.target.value; } })),
+      note,
+      h('div', { class: 'sheet-actions' },
+        h('button', { class: 'btn', type: 'button', onclick: () => sh.close() }, 'ביטול'), ok)));
+    paint();
+  }
+
   function openTaskEditor(existing) {
-    const d = existing
-      ? JSON.parse(JSON.stringify(existing))
-      : { id: S.uid(), title: '', emoji: '🧹', points: 5, period: 'week', times: 1, assignees: [], team: false };
+    const draft = existing ? null : loadDraft();
+    const d = existing ? JSON.parse(JSON.stringify(existing)) : (draft || blankTask());
+    const sameShape = (x) => JSON.stringify({ ...x, id: '' });
+    const baseline = sameShape(existing || blankTask());
+    const isDirty = () => sameShape(d) !== baseline;
+    if (draft) toast('שחזרנו טיוטה שלא נשמרה');
 
     const emojiGrid = h('div', { class: 'emoji-grid' });
     const whoChips = h('div', { class: 'chips' });
@@ -515,10 +681,17 @@
             if (!d.title) return toast('חסר שם למשימה');
             if (!(d.points > 0)) return toast('הניקוד צריך להיות גדול מ-0');
             S.upsertTask(d);
+            clearDraft();
             sh.close();
           },
         }, 'שמירה')));
-    const sh = sheet(existing ? 'עריכת משימה' : 'משימה חדשה', body);
+    const sh = sheet(existing ? 'עריכת משימה' : 'משימה חדשה', body, { dirty: isDirty, onDiscard: clearDraft });
+    if (!existing) {
+      // לא שומרים טיוטה אחרי שהחלונית נסגרה (הלחיצה על "שמירה" מגיעה גם למאזין הזה)
+      const keep = () => { if (sh.root.isConnected && isDirty()) saveDraft(d); };
+      body.addEventListener('input', keep);
+      body.addEventListener('click', () => setTimeout(keep, 0));
+    }
     paint();
   }
 
@@ -526,6 +699,7 @@
     const idx = S.state.members.length;
     const d = existing ? { ...existing }
       : { id: S.uid(), name: '', role: 'kid', avatar: '', color: COLORS[idx % COLORS.length] };
+    const memberBase = JSON.stringify(d);
     const avatarGrid = h('div', { class: 'emoji-grid' });
     const colorRow = h('div', { class: 'chips' });
     function paint() {
@@ -562,13 +736,14 @@
             S.upsertMember(d);
             sh.close();
           },
-        }, 'שמירה'))));
+        }, 'שמירה'))),
+    { dirty: () => JSON.stringify(d) !== memberBase });
     paint();
   }
 
   /* ---------- ניהול (הורים) ---------- */
   function pinGate() {
-    const input = h('input', { type: 'password', inputmode: 'numeric', autocomplete: 'off', placeholder: '••••', 'aria-label': 'קוד הורים' });
+    const input = h('input', { type: 'password', inputmode: 'numeric', autocomplete: 'current-password', placeholder: '••••', 'aria-label': 'קוד הורים' });
     return h('div', { class: 'gate' },
       h('div', { class: 'lock' }, icon('lock', 44)),
       h('h2', null, 'אזור להורים'),
@@ -577,10 +752,10 @@
         onsubmit: (e) => {
           e.preventDefault();
           if (input.value === S.state.settings.pin) {
-            ui.unlocked = true; ss.set('familypoints.unlocked', '1'); render();
+            unlock(); render();
           } else { toast('קוד שגוי'); input.value = ''; }
         },
-      }, input, h('button', { class: 'btn primary', type: 'submit' }, 'כניסה')));
+      }, hiddenUser(), input, h('button', { class: 'btn primary', type: 'submit' }, 'כניסה')));
   }
 
   function approvalsTab() {
@@ -592,7 +767,7 @@
         h('h3', null, `מחכות לאישור (${pend.length})`),
         pend.length
           ? [pend.map((c) => h('div', { class: 'list-row' },
-            h('span', { style: { fontSize: '26px' } }, c.emoji),
+            h('span', { style: { fontSize: '26px' } }, compIcon(c)),
             h('div', { class: 'grow' }, c.title, h('small', null, `${names(c)} · ${when(c.ts)} · ${fmt(c.pointsEach)} נק׳ לכל אחד`)),
             h('button', { class: 'btn good small', type: 'button', onclick: () => S.setCompletionStatus(c.id, 'approved') }, 'אשר'),
             h('button', { class: 'btn danger small', type: 'button', onclick: () => S.removeCompletion(c.id) }, 'דחה'))),
@@ -603,7 +778,7 @@
         h('h3', null, 'אושרו לאחרונה'),
         recent.length
           ? recent.map((c) => h('div', { class: 'list-row' },
-            h('span', { style: { fontSize: '24px' } }, c.emoji),
+            h('span', { style: { fontSize: '24px' } }, compIcon(c)),
             h('div', { class: 'grow' }, c.title, h('small', null, `${names(c)} · ${when(c.ts)} · ${fmt(c.pointsEach)} נק׳`)),
             h('button', {
               class: 'btn danger small', type: 'button',
@@ -637,6 +812,8 @@
       h('div', { class: 'card' }, S.state.members.map((m) =>
         h('div', { class: 'list-row' }, avatar(m, 42),
           h('div', { class: 'grow' }, m.name, h('small', null, `${m.role === 'parent' ? 'הורה' : 'ילד/ה'} · ${fmt(S.pointsFor(m.id, 'all'))} נק׳ סה״כ`)),
+          h('button', { class: 'btn small', type: 'button', title: 'הוספת נקודות', 'aria-label': 'הוספת נקודות', onclick: () => openBonus(m.id) },
+            icon('star', 16), h('span', { class: 'lbl' }, 'הוספת נקודות')),
           h('button', { class: 'btn small', type: 'button', onclick: () => openMemberEditor(m) }, 'עריכה')))),
     ];
   }
@@ -805,7 +982,7 @@
   }
 
   function connectScreen() {
-    const input = h('input', { type: 'password', autocomplete: 'off', placeholder: 'קוד המשפחה', 'aria-label': 'קוד המשפחה' });
+    const input = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'קוד המשפחה', 'aria-label': 'קוד המשפחה' });
     const err = h('div', { class: 'sheet-note', style: { color: '#c4352f' } });
     return h('div', { class: 'ob' },
       h('div', { class: 'hero', html: Art.hero() }),
@@ -814,7 +991,7 @@
       h('form', {
         class: 'field',
         onsubmit: (e) => { e.preventDefault(); err.textContent = ''; connectWith(input.value, err); },
-      }, input, err, h('button', { class: 'btn primary block', type: 'submit' }, 'התחברות')),
+      }, hiddenUser(), input, err, h('button', { class: 'btn primary block', type: 'submit' }, 'התחברות')),
       h('button', {
         class: 'btn block', type: 'button', style: { marginTop: '12px' },
         onclick: () => { try { sessionStorage.setItem('familypoints.localonly', '1'); } catch (e) { /* ignore */ } render(); },
@@ -848,6 +1025,7 @@
       return;
     }
     if (ui.me && !S.member(ui.me)) ui.me = null;
+    if (ui.edit && !canAdmin()) ui.edit = false;
     const route = location.hash.replace(/^#\/?/, '');
     const parts = route.split('/').filter(Boolean);
     let view; let tab;

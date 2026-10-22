@@ -174,6 +174,7 @@ const Store = (() => {
     if (period === 'day') return dayKey(d);
     if (period === 'week') return dayKey(weekStart(d));
     if (period === 'month') return monthKey(d);
+    if (period === 'year') return String(d.getFullYear());
     return 'once';
   }
   function windowStart(win, now = Date.now()) {
@@ -234,6 +235,20 @@ const Store = (() => {
       members: memberIds.slice(),
       pointsEach: roundPts(t.points / memberIds.length),
       status,
+    };
+    state.completions.push(c);
+    mark('completion', c.id);
+    save();
+    return c;
+  }
+
+  // נקודות ידניות מההורים (בונוס): רשומה רגילה שמאושרת מיד, בלי משימה מאחוריה
+  function addBonus(memberId, points, reason, now = Date.now()) {
+    const p = roundPts(Number(points));
+    if (!member(memberId) || !(p > 0)) return null;
+    const c = {
+      id: uid(), taskId: 'bonus', title: (reason || '').trim() || 'בונוס מההורים', emoji: '',
+      points: p, ts: now, members: [memberId], pointsEach: p, status: 'approved',
     };
     state.completions.push(c);
     mark('completion', c.id);
@@ -385,7 +400,7 @@ const Store = (() => {
     onChange: (fn) => listeners.push(fn),
     uid, member, task, taskStatus, pointsFor, pending, roundPts,
     periodKey, windowStart,
-    addCompletion, setCompletionStatus, removeCompletion,
+    addCompletion, addBonus, setCompletionStatus, removeCompletion,
     upsertMember, deleteMember, upsertTask, deleteTask,
     addSampleTasks, setSettings, finishOnboarding,
     exportJSON, importJSON, reset,
