@@ -298,8 +298,8 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
 .group-title small { order: 2; font-weight: 500; color: var(--muted); font-size: 12.5px; background: #f0eadf; border-radius: 99px; padding: 1px 9px; }
 .task-group:first-of-type .group-title { margin-top: 8px; }
 
-.site-foot { text-align: center; margin: 34px 0 8px; font-size: 13px; color: var(--muted); }
-.site-foot a { display: inline-block; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .7); font-weight: 600; color: var(--muted); }
+.site-foot { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 34px 0 8px; font-size: 13px; color: var(--muted); }
+.site-foot a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .7); font-weight: 600; color: var(--muted); }
 .site-foot a:hover { color: var(--accent-d); border-color: var(--accent); }
 
 /* ---------- מסך צחצוח שיניים ---------- */

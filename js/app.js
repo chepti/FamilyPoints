@@ -46,6 +46,7 @@
     reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/>',
     mute: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6M16 9l6 6"/>',
+    mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
     chevR: '<path d="m9 18 6-6-6-6"/>',
     chevL: '<path d="m15 18-6-6 6-6"/>',
   };
@@ -229,7 +230,11 @@
         'קוד המשפחה לא תקין (אולי הוחלף). היכנסו להורים ← הגדרות ← סנכרון והתחברו מחדש.'),
       h('main', { class: 'view', 'data-tab': active }, view),
       h('footer', { class: 'site-foot' },
-        h('a', { href: 'https://chepti.com', target: '_blank', rel: 'noopener' }, 'חולמים תקשוב')),
+        h('a', { href: 'https://chepti.com', target: '_blank', rel: 'noopener' }, 'חולמים תקשוב'),
+        h('a', {
+          class: 'feedback', href: 'mailto:chepti@gmail.com?subject=' + encodeURIComponent('משוב על נקודות משפחה'),
+          title: 'שלחו לנו מייל עם רעיון או תקלה',
+        }, icon('mail', 15), 'משוב')),
       h('nav', { class: 'tabbar', 'aria-label': 'ניווט ראשי' },
         tabLink('#/', 'home', 'בית', 'home', active),
         tabLink('#/tasks', 'check', 'משימות', 'tasks', active),
