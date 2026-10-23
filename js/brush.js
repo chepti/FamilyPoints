@@ -17,12 +17,23 @@ const BrushScreen = (() => {
     { label: 'למטה בצד שמאל', d: 'M60 74 C34 74 17 64 14 48' },
   ];
 
-  const slotAt = (d = new Date()) => {
+  // בשבת לא מצחצחים: שישי בערב ושבת בבוקר לא נספרים (dow: 5 = שישי, 6 = שבת). במוצאי שבת (ערב של שבת) מצחצחים כרגיל
+  const rests = (dow, slot) => (dow === 5 && slot === 'e') || (dow === 6 && slot === 'm');
+  const dowOfKey = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d, 12).getDay(); };
+  const restsOn = (dayKey, slot) => rests(dowOfKey(dayKey), slot);
+
+  const rawSlotAt = (d) => {
     const hr = d.getHours();
     if (hr >= SLOTS.m.from && hr < SLOTS.m.to) return 'm';
     if (hr >= SLOTS.e.from && hr < SLOTS.e.to) return 'e';
     return null;
   };
+  // החלון הפתוח עכשיו, או null (גם כשזה זמן שבת שבו לא מצחצחים)
+  const slotAt = (d = new Date()) => {
+    const s = rawSlotAt(d);
+    return s && !rests(d.getDay(), s) ? s : null;
+  };
+  const shabbatNow = (d = new Date()) => { const s = rawSlotAt(d); return !!s && rests(d.getDay(), s); };
   const zoneOf = (leftMs) => Math.min(3, Math.floor((TOTAL_MS - leftMs) / ZONE_MS));
   const fmtTime = (ms) => {
     const s = Math.ceil(ms / 1000);
@@ -250,8 +261,12 @@ const BrushScreen = (() => {
     }
 
     function closedHint() {
+      if (shabbatNow()) return 'בשבת לא מצחצחים. במוצאי שבת מצחצחים בערב כרגיל.';
       return `אפשר לסמן בבוקר בין ${SLOTS.m.range} ובערב בין ${SLOTS.e.range}.`;
     }
+
+    // חלון שבת מוסתר, אלא אם כבר סומנה בו שורה (לא מעלימים נתון קיים)
+    const shownSlots = (memberId, day) => ['m', 'e'].filter((s) => !restsOn(day, s) || S.isBrushed(memberId, day, s));
 
     function slotPill(memberId, day, s, current) {
       const done = S.isBrushed(memberId, day, s);
@@ -286,10 +301,10 @@ const BrushScreen = (() => {
         }
       } else {
         kids.push(
-          h('button', { class: 'btn br-big', type: 'button', disabled: true }, icon('tooth', 24), 'לא בשעות הצחצוח'),
+          h('button', { class: 'btn br-big', type: 'button', disabled: true }, icon('tooth', 24), shabbatNow() ? 'שבת: לא מצחצחים' : 'לא בשעות הצחצוח'),
           h('p', { class: 'br-sub' }, closedHint()));
       }
-      kids.push(h('div', { class: 'br-today' }, slotPill(m.id, day, 'm', slot), slotPill(m.id, day, 'e', slot)));
+      kids.push(h('div', { class: 'br-today' }, shownSlots(m.id, day).map((s) => slotPill(m.id, day, s, slot))));
       box.replaceChildren(...kids);
     }
 
@@ -299,7 +314,7 @@ const BrushScreen = (() => {
       els.chip.className = 'br-chip' + (slot ? ' on' : '');
       els.chip.replaceChildren(
         icon(slot ? SLOTS[slot].icon : 'tooth', 18),
-        slot ? `עכשיו: צחצוח ${SLOTS[slot].label}` : 'מחוץ לשעות הצחצוח');
+        slot ? `עכשיו: צחצוח ${SLOTS[slot].label}` : (shabbatNow() ? 'שבת: לא מצחצחים' : 'מחוץ לשעות הצחצוח'));
     }
 
     // השעון זז בזמן שהמסך פתוח: מעדכן את הכפתור כשנפתח או נסגר חלון
@@ -333,7 +348,7 @@ const BrushScreen = (() => {
       avatar(m, 84),
       h('span', { class: 'br-name' }, m.name),
       h('span', { class: 'br-marks' },
-        ['m', 'e'].map((s) => h('i', {
+        shownSlots(m.id, day).map((s) => h('i', {
           class: 'br-mark' + (S.isBrushed(m.id, day, s) ? ' done' : ''),
           title: `${SLOTS[s].label}: ${S.isBrushed(m.id, day, s) ? 'צוחצח' : 'עוד לא'}`,
         }, icon(SLOTS[s].icon, 15))))));
@@ -368,5 +383,5 @@ const BrushScreen = (() => {
     return { view };
   }
 
-  return { create, slotAt, SLOTS };
+  return { create, slotAt, SLOTS, rests, restsOn };
 })();

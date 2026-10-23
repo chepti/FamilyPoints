@@ -63,7 +63,11 @@ const BrushReport = (() => {
     const days = win.days.map((d) => {
       const p = parts(d);
       const key = S.periodKey('day', d.getTime());
-      return { key, dow: d.getDay(), label: dayLabel(p), greg: d.getDate(), today: key === todayKey, future: key > todayKey };
+      const dow = d.getDay();
+      return {
+        key, dow, label: dayLabel(p), greg: d.getDate(), today: key === todayKey, future: key > todayKey,
+        mRest: BrushScreen.rests(dow, 'm'), eRest: BrushScreen.rests(dow, 'e'), // בשבת לא מצחצחים: שישי ערב, שבת בוקר
+      };
     });
     const first0 = parts(win.start);
     const head = { name: first0.month, year: yearLabel(first0), title: `${first0.month} ${yearLabel(first0)}` };
@@ -72,11 +76,12 @@ const BrushReport = (() => {
     let first = null;
     for (const b of S.state.brushes) if (!first || b.day < first) first = b.day;
 
-    // כמה סימונים אפשר היה לעשות עד עכשיו: 2 ליום. היום רק בוקר, ורק אחרי שחלון הבוקר נסגר. עתיד: 0
+    // כמה סימונים אפשר היה לעשות עד עכשיו: בוקר וערב, בלי חלונות שבת. היום רק בוקר, ורק אחרי שחלון הבוקר נסגר. עתיד: 0
     let possible = 0;
     for (const d of days) {
       if (!first || d.key < first || d.future) continue;
-      possible += d.today ? (t.getHours() >= SL.m.to ? 1 : 0) : 2;
+      if (d.today) possible += t.getHours() >= SL.m.to && !d.mRest ? 1 : 0;
+      else possible += (d.mRest ? 0 : 1) + (d.eRest ? 0 : 1);
     }
 
     const rows = S.state.members.filter(S.brushTracked).map((m) => {
@@ -106,12 +111,15 @@ const BrushReport = (() => {
       const cells = [];
       for (let i = 0; i < lead; i++) cells.push(h('div', { class: 'bp-day blank', 'aria-hidden': 'true' }));
       for (const d of r.days) {
-        const label = `${d.label} (${d.greg}): ${d.future ? 'עוד לא הגיע' : `בוקר ${d.m ? 'צחצח' : 'לא סומן'}, ערב ${d.e ? 'צחצח' : 'לא סומן'}`}`;
+        const mHide = d.mRest && !d.m;
+        const eHide = d.eRest && !d.e;
+        const state = (hide, on, name) => (hide ? `${name}: שבת, לא מצחצחים` : `${name} ${on ? 'צחצח' : 'לא סומן'}`);
+        const label = `${d.label} (${d.greg}): ${d.future ? 'עוד לא הגיע' : `${state(mHide, d.m, 'בוקר')}, ${state(eHide, d.e, 'ערב')}`}`;
         cells.push(h('div', { class: 'bp-day' + (d.today ? ' today' : '') + (d.future ? ' future' : ''), role: 'img', 'aria-label': label, title: label },
           h('span', { class: 'n' }, d.label),
           h('span', { class: 'pips' },
-            h('i', { class: 'pip m' + (d.m ? ' on' : '') }),
-            h('i', { class: 'pip e' + (d.e ? ' on' : '') }))));
+            h('i', { class: 'pip m' + (d.m ? ' on' : '') + (mHide ? ' na' : '') }),
+            h('i', { class: 'pip e' + (d.e ? ' on' : '') + (eHide ? ' na' : '') }))));
       }
       return h('div', { class: 'bp-cal' },
         WEEKDAYS.map((w) => h('div', { class: 'bp-dow', 'aria-hidden': 'true' }, w)), cells);
@@ -197,6 +205,7 @@ const BrushReport = (() => {
             h('div', null, h('b', null, month), h('span', null, `צחצוחים ב${rep.head.name}`)),
             h('div', null, h('b', null, ready), h('span', null, ready === 1 ? 'פרס מחכה' : 'פרסים מחכים'))),
           h('p', null, `כל ${S.PRIZE_EVERY} צחצוחים (בוקר או ערב) שווים ${PRIZE_LABEL}. הפרסים נספרים על כל הצחצוחים ולא רק על החודש שמוצג, ולכן פרס שהורווח לא נעלם עד שמסמנים "נמסר".`),
+          h('p', { class: 'bp-note' }, 'בשבת לא מצחצחים: שישי בערב ושבת בבוקר מוסתרים ולא נחשבים החמצה. במוצאי שבת מצחצחים כרגיל.'),
           h('div', { class: 'bp-legend', 'aria-hidden': 'true' },
             h('span', null, h('i', { class: 'pip m on' }), 'בוקר'),
             h('span', null, h('i', { class: 'pip e on' }), 'ערב'),
