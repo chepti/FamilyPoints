@@ -40,6 +40,7 @@
     users: '<circle cx="9" cy="8.5" r="3.3"/><path d="M3 20c.4-3.6 2.9-5.5 6-5.5s5.6 1.9 6 5.5"/><path d="M16 5.4a3.3 3.3 0 0 1 0 6.2"/><path d="M18 14.8c1.9.7 3.1 2.4 3.4 5.2"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
     tooth: '<path d="M12 5.2C13.2 4.2 14.4 3.7 15.8 3.7 18.1 3.7 20 5.5 20 8c0 2-.8 3.2-1.4 5-.6 2-.6 5-1.4 7.3-.3.9-1.4.8-1.7-.1-.5-1.4-.9-3.4-1.7-4.2-.5-.5-3.1-.5-3.6 0-.8.8-1.2 2.8-1.7 4.2-.3.9-1.4 1-1.7.1C6 18 6 15 5.4 13 4.8 11.2 4 10 4 8c0-2.5 1.9-4.3 4.2-4.3 1.4 0 2.6.5 3.8 1.5Z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
     moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
@@ -268,6 +269,7 @@
 
   const SYNC_LABEL = { ok: 'מסונכרן', connecting: 'מתחבר…', offline: 'אין חיבור', auth: 'קוד שגוי' };
   const Brush = BrushScreen.create({ h, S, avatar, icon, toast, burst, render: () => render(), me: () => ui.me });
+  const BrushParents = BrushReport.create({ h, S, avatar, icon, toast, askConfirm, render: () => render() });
   const SYNC_TEXT = {
     ok: 'מחוברים. שינויים מופיעים בכל המכשירים תוך כמה שניות.',
     connecting: 'מתחבר…',
@@ -940,13 +942,16 @@
   function adminView() {
     if (S.state.settings.pin && !ui.unlocked) return pinGate();
     const pend = S.pending().length;
-    const tabs = [['approvals', 'אישורים'], ['tasks', 'משימות'], ['family', 'משפחה'], ['settings', 'הגדרות']];
-    const content = { approvals: approvalsTab, tasks: tasksTab, family: familyTab, settings: settingsTab }[ui.adminTab]();
+    const tabs = [['approvals', 'אישורים'], ['brush', 'צחצוח'], ['tasks', 'משימות'], ['family', 'משפחה'], ['settings', 'הגדרות']];
+    const prizes = BrushParents.waiting();
+    const content = { approvals: approvalsTab, brush: BrushParents.view, tasks: tasksTab, family: familyTab, settings: settingsTab }[ui.adminTab]();
     return [
       h('div', { class: 'section-title' }, 'אזור ההורים'),
       h('div', { class: 'tabs', role: 'tablist' }, tabs.map(([k, label]) =>
         h('button', { type: 'button', class: ui.adminTab === k ? 'on' : '', onclick: () => { ui.adminTab = k; render(); } },
-          label, k === 'approvals' && pend > 0 && h('i', { class: 'badge' }, pend)))),
+          label,
+          k === 'approvals' && pend > 0 && h('i', { class: 'badge' }, pend),
+          k === 'brush' && prizes > 0 && h('i', { class: 'badge gift', title: 'פרסים שמחכים' }, prizes)))),
       h('div', { class: 'admin-grid' }, content),
     ];
   }

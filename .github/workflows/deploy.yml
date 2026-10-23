@@ -82,7 +82,7 @@ jobs:
             local page f
             page=$(curl -fsS "$SITE_URL/") || return 1
             grep -q "js/app.js?v=$V" <<<"$page" || { echo "index.html does not reference this build yet"; return 1; }
-            for f in js/app.js js/sync.js js/store.js js/art.js js/brush.js css/style.css; do
+            for f in js/app.js js/sync.js js/store.js js/art.js js/brush.js js/brushreport.js css/style.css; do
               curl -fsS "$SITE_URL/$f?v=$V" | cmp -s - "$f" || { echo "$f served by the site differs from the repo yet"; return 1; }
             done
           }

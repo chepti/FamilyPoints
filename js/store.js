@@ -29,6 +29,7 @@ const Store = (() => {
       tasks: [],
       completions: [],
       brushes: [], // צחצוח שיניים: {id, memberId, day, slot: 'm'|'e', ts}
+      prizes: [], // פרסי צחצוח שנמסרו: {id: memberId_pN, memberId, n, ts}
       settings: defaultSettings(),
       // מצב סנכרון: on = מחוברים לשרת, rev = הגרסה האחרונה שקיבלנו,
       // dirty = רשומות ששונו כאן ועוד לא נשלחו
@@ -80,7 +81,7 @@ const Store = (() => {
     s.dirty[t + ':' + id] = { n: s.n, del };
   }
   // סוג רשומה לא מוכר (מגרסה חדשה יותר של האפליקציה) מתעלמים ממנו, לא מערבבים אותו ברשימה אחרת
-  const listFor = (t) => ({ member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes }[t] || null);
+  const listFor = (t) => ({ member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes, prize: state.prizes }[t] || null);
   const lookup = (t, id) => {
     if (t === 'settings') return state.settings;
     const list = listFor(t);
@@ -147,6 +148,7 @@ const Store = (() => {
     state.tasks.forEach((t) => mark('task', t.id));
     state.completions.forEach((c) => mark('completion', c.id));
     state.brushes.forEach((b) => mark('brush', b.id));
+    state.prizes.forEach((p) => mark('prize', p.id));
     mark('settings', 'main');
     persist(false);
   }
@@ -346,6 +348,41 @@ const Store = (() => {
     save();
   }
 
+  /* ---------- פרסי צחצוח ---------- */
+  const PRIZE_EVERY = 5; // כל 5 צחצוחים = פרס (למשל מ"הכל בשקל")
+  // מי בתוכנית הפרסים: ילדים כברירת מחדל, הורים רק אם סומנו. ההורה משנה את זה בתצוגת הצחצוח
+  const brushTracked = (m) => (m.brushPrize === undefined ? m.role !== 'parent' : !!m.brushPrize);
+
+  // הפרס מחושב על כל הצחצוחים (לא רק חודש אחרון), וההורה מסמן "נמסר". אחרת פרס שהורווח מוקדם היה נעלם
+  function prizeStatus(memberId) {
+    const total = state.brushes.filter((b) => b.memberId === memberId).length;
+    const given = state.prizes.filter((p) => p.memberId === memberId).sort((a, b) => b.n - a.n);
+    const earned = Math.floor(total / PRIZE_EVERY);
+    return { total, earned, redeemed: given.length, available: Math.max(0, earned - given.length), cycle: total % PRIZE_EVERY, given };
+  }
+
+  // מזהה קבוע לפי מספר הפרס: שני הורים שמסמנים "נמסר" באותו רגע ממכשירים שונים לא יוצרים פרס כפול
+  function addPrize(memberId, now = Date.now()) {
+    const st = prizeStatus(memberId);
+    if (!member(memberId) || st.available < 1) return null;
+    const n = st.redeemed + 1;
+    const id = `${memberId}_p${n}`;
+    if (state.prizes.some((p) => p.id === id)) return null;
+    const p = { id, memberId, n, ts: now };
+    state.prizes.push(p);
+    mark('prize', id);
+    save();
+    return p;
+  }
+
+  function removePrize(id) {
+    const i = state.prizes.findIndex((p) => p.id === id);
+    if (i < 0) return;
+    state.prizes.splice(i, 1);
+    mark('prize', id, true);
+    save();
+  }
+
   // כמה שינויים מחכים לשליחה (לתצוגת "אין חיבור")
   const pendingCount = () => Object.keys(state.sync.dirty).length;
 
@@ -374,7 +411,7 @@ const Store = (() => {
         !Array.isArray(parsed.completions)) {
       throw new Error('הקובץ לא נראה כמו גיבוי של האפליקציה');
     }
-    const old = { member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes };
+    const old = { member: state.members, task: state.tasks, completion: state.completions, brush: state.brushes, prize: state.prizes };
     const sync = state.sync;
     const next = Object.assign(defaults(), parsed, {
       settings: Object.assign(defaultSettings(), parsed.settings || {}),
@@ -400,6 +437,7 @@ const Store = (() => {
       tomb('task', state.tasks);
       tomb('completion', state.completions);
       tomb('brush', state.brushes);
+      tomb('prize', state.prizes);
     }
     state = defaults();
     state.sync = sync;
@@ -416,7 +454,7 @@ const Store = (() => {
     upsertMember, deleteMember, upsertTask, deleteTask,
     addSampleTasks, setSettings, finishOnboarding,
     exportJSON, importJSON, reset,
-    isBrushed, setBrush,
+    isBrushed, setBrush, brushTracked, prizeStatus, addPrize, removePrize, PRIZE_EVERY,
     // סנכרון
     hasDirty, pendingCount, collectDirty, applySync, syncOn, markAllDirty, replaceFromRemote,
   };

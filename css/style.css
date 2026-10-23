@@ -499,3 +499,49 @@ input:focus, select:focus { border-color: var(--accent); outline: none; box-shad
   * { animation: none !important; transition: none !important; }
   .confetti { display: none; }
 }
+
+/* ---------- תצוגת הורים: צחצוח שיניים ---------- */
+.badge.gift { background: var(--gold); color: #5a3d00; }
+.bp-sum { grid-column: 1 / -1; }
+.bp-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 4px; }
+.bp-month { flex: 1; text-align: center; font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+.bp-month small { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.bp-day.future { background: #faf6ef; border: 1px dashed #e8e0d2; }
+.bp-day.future .n { color: #b3aa9a; }
+.bp-day.future .pip { background: #eee8dc; }
+.bp-stats { display: flex; gap: 10px; margin: 8px 0; }
+.bp-stats > div { flex: 1; background: #f8f1e6; border-radius: 12px; padding: 8px 10px; text-align: center; }
+.bp-stats b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+.bp-stats span { font-size: 12.5px; color: var(--muted); }
+.bp-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.bp-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+.bp-head { display: flex; align-items: center; gap: 12px; }
+.bp-head .grow { flex: 1; min-width: 0; }
+.bp-head small { display: block; color: var(--muted); font-size: 13px; }
+.bp-big { font-size: 30px; font-weight: 700; letter-spacing: -1px; color: var(--teal-d); }
+
+.bp-prize { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; padding: 8px 10px; border-radius: 12px; background: #f8f1e6; font-size: 14px; }
+.bp-prize .grow { flex: 1; min-width: 0; font-weight: 500; }
+.bp-prize.ready { background: var(--gold-soft); border: 1px solid #f3dca0; color: #7a5600; font-weight: 600; }
+.bp-prize.ready .icon { color: var(--gold); }
+.bp-prize small { display: block; font-weight: 400; }
+.bp-pips { display: inline-flex; gap: 4px; }
+.bp-pips i { width: 12px; height: 12px; border-radius: 50%; background: #e3dccf; }
+.bp-pips i.on { background: var(--accent); }
+
+.bp-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 10px; }
+.bp-dow { font-size: 11px; color: var(--muted); text-align: center; }
+.bp-day { background: #f6f1e8; border-radius: 8px; padding: 3px 2px 5px; text-align: center; min-height: 40px; }
+.bp-day.blank { background: transparent; }
+.bp-day.today { outline: 2px solid var(--accent); outline-offset: -1px; }
+.bp-day .n { display: block; font-size: 11px; color: var(--muted); line-height: 1.3; }
+.bp-day .pips { display: flex; gap: 4px; justify-content: center; margin-top: 3px; }
+.pip { display: inline-block; width: 10px; height: 10px; background: #ddd5c6; }
+.pip.m { border-radius: 50%; }
+.pip.e { border-radius: 3px; }
+.pip.m.on { background: var(--gold); }
+.pip.e.on { background: var(--teal-d); }
+
+.bp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.bp-given { display: inline-flex; align-items: center; gap: 8px; }

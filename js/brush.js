@@ -368,5 +368,5 @@ const BrushScreen = (() => {
     return { view };
   }
 
-  return { create, slotAt };
+  return { create, slotAt, SLOTS };
 })();

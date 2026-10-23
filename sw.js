@@ -2,7 +2,7 @@
 const CACHE = 'familypoints-v3';
 const FONTS = 'familypoints-fonts'; // גופן Rubik: נשמר אחרי הטעינה הראשונה כדי שגם בלי רשת יראה אותו דבר
 const SHELL = [
-  './', 'index.html', 'css/style.css', 'js/store.js', 'js/sync.js', 'js/art.js', 'js/brush.js', 'js/app.js',
+  './', 'index.html', 'css/style.css', 'js/store.js', 'js/sync.js', 'js/art.js', 'js/brush.js', 'js/brushreport.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg',
 ];
 
