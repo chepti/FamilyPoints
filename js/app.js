@@ -268,8 +268,8 @@
   }
 
   const SYNC_LABEL = { ok: 'מסונכרן', connecting: 'מתחבר…', offline: 'אין חיבור', auth: 'קוד שגוי' };
-  const Brush = BrushScreen.create({ h, S, avatar, icon, toast, burst, render: () => render(), me: () => ui.me });
   const BrushParents = BrushReport.create({ h, S, avatar, icon, toast, askConfirm, render: () => render() });
+  const Brush = BrushScreen.create({ h, S, avatar, icon, toast, burst, render: () => render(), me: () => ui.me, progress: (id) => BrushParents.progress(id) });
   const SYNC_TEXT = {
     ok: 'מחוברים. שינויים מופיעים בכל המכשירים תוך כמה שניות.',
     connecting: 'מתחבר…',
@@ -556,6 +556,8 @@
         h('div', { class: 'tile' }, h('b', null, fmt(S.pointsFor(m.id, 'all'))), h('span', null, 'סה״כ'))),
       // רק להורה שהזין את הקוד בביקור הזה
       ui.unlocked && h('button', { class: 'btn small bonus-btn', type: 'button', onclick: () => openBonus(m.id) }, icon('star', 16), 'הוספת נקודות'));
+    // ההתקדמות בצחצוח (קריאה בלבד) לכל מי שנמצא בתוכנית הפרסים
+    const brushCard = S.brushTracked(m) ? BrushParents.progress(m.id) : null;
 
     const main = [
       h('div', { class: 'section-title' }, 'המשימות שלי', h('small', null, mine.length)),
@@ -578,7 +580,7 @@
 
     return [
       h('a', { class: 'back', href: '#/' }, '→ חזרה'),
-      h('div', { class: 'pv-grid' }, h('div', { class: 'pv-side' }, side), h('div', { class: 'pv-main' }, main)),
+      h('div', { class: 'pv-grid' }, h('div', { class: 'pv-side' }, side, brushCard), h('div', { class: 'pv-main' }, main)),
     ];
   }
 

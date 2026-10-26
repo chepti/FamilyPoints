@@ -243,6 +243,7 @@ const BrushScreen = (() => {
         if (on) centerOn(c, true);
       });
       paintAction();
+      paintProgress();
       if (timer.state === 'done') paintTimer();
     }
 
@@ -308,6 +309,11 @@ const BrushScreen = (() => {
       box.replaceChildren(...kids);
     }
 
+    // ההתקדמות של מי שנבחר: הילד רואה את החודש שלו ואת הדרך לפרס
+    function paintProgress() {
+      if (els.progress && ctx.progress && selId) els.progress.replaceChildren(ctx.progress(selId));
+    }
+
     function paintHead() {
       if (!els.chip) return;
       const slot = slotAt();
@@ -355,6 +361,7 @@ const BrushScreen = (() => {
       els.track.append(...els.cards);
       els.action = h('div', { class: 'br-action' });
       els.timer = h('section', { class: 'br-timer', 'aria-label': 'טיימר צחצוח' });
+      els.progress = h('div', { class: 'br-progress' });
 
       if (!members.length) {
         return [h('div', { class: 'empty' }, 'עוד אין בני משפחה. מוסיפים אותם במסך ההורים.')];
@@ -363,6 +370,7 @@ const BrushScreen = (() => {
       paintHead();
       paintAction();
       paintTimer();
+      paintProgress();
       setTimeout(() => centerOn(els.cards.find((c) => c.dataset.id === selId), false), 0);
 
       return [
@@ -376,7 +384,8 @@ const BrushScreen = (() => {
               els.track,
               h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'הבא', title: 'הבא', onclick: () => step(1) }, icon('chevL', 22))),
             els.action),
-          els.timer),
+          els.timer,
+          els.progress),
       ];
     }
 

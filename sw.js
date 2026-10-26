@@ -1,13 +1,24 @@
 /* רשת קודם, מטמון כגיבוי: כך עדכונים מגיעים מיד, והאפליקציה עדיין נפתחת בלי חיבור. */
-const CACHE = 'familypoints-v3';
+const CACHE = 'familypoints-v4';
 const FONTS = 'familypoints-fonts'; // גופן Rubik: נשמר אחרי הטעינה הראשונה כדי שגם בלי רשת יראה אותו דבר
-const SHELL = [
-  './', 'index.html', 'css/style.css', 'js/store.js', 'js/sync.js', 'js/art.js', 'js/brush.js', 'js/brushreport.js', 'js/app.js',
-  'manifest.webmanifest', 'icons/icon.svg',
-];
+const EXTRA = ['manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
+// הקבצים בדף מגיעים עם ?v=<גרסה>. לכן בהתקנה שומרים את הדף עצמו ואת בדיוק הכתובות שהוא מבקש,
+// אחרת ביקור ראשון ואז ניתוק (לפני טעינה שנייה) לא היה נפתח.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    const res = await fetch('./', { cache: 'reload' });
+    if (!res.ok) throw new Error('index ' + res.status);
+    const forRoot = res.clone();
+    const forIndex = res.clone();
+    const html = await res.text();
+    await c.put('./', forRoot);
+    await c.put('index.html', forIndex);
+    const assets = [...new Set([...html.matchAll(/(?:src|href)="((?:css|js)\/[^"]+)"/g)].map((m) => m[1]))];
+    await Promise.all(assets.map((u) => c.add(new Request(u, { cache: 'reload' }))));
+    await Promise.allSettled(EXTRA.map((u) => c.add(new Request(u, { cache: 'reload' }))));
+  })().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -17,6 +28,19 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim())
   );
 });
+
+// שומרים רק תשובות תקינות, ומוחקים גרסאות ישנות של אותו קובץ (?v=...) כדי שהמטמון לא יתנפח עם כל פריסה
+async function remember(req, res) {
+  if (!res || !res.ok || res.status !== 200) return;
+  const c = await caches.open(CACHE);
+  await c.put(req, res);
+  const u = new URL(req.url);
+  if (!u.searchParams.has('v')) return;
+  for (const k of await c.keys()) {
+    const ku = new URL(k.url);
+    if (ku.pathname === u.pathname && ku.searchParams.has('v') && k.url !== req.url) await c.delete(k);
+  }
+}
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
@@ -30,11 +54,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
   e.respondWith(
     fetch(req)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
-        return res;
-      })
-      .catch(() => caches.match(req).then((hit) => hit || caches.match('./')))
+      .then((res) => { e.waitUntil(remember(req, res.clone())); return res; })
+      .catch(() => caches.match(req).then((hit) => hit ||
+        // רק ניווט חוזר לדף הבית. קובץ קוד שחסר לא יקבל HTML במקום JavaScript
+        (req.mode === 'navigate' ? caches.match('./') : Response.error())))
   );
 });

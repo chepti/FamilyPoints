@@ -53,7 +53,7 @@ const BrushReport = (() => {
 
   /* חישוב נקי, בלי DOM: לכל בן משפחה בתוכנית מחזיר את ימי החודש, ספירות ופרסים.
    * offset = 0 החודש הנוכחי, -1 הקודם וכן הלאה */
-  function compute(S, now = Date.now(), offset = 0) {
+  function compute(S, now = Date.now(), offset = 0, ids = null) {
     const SL = BrushScreen.SLOTS;
     const t = new Date(now);
     let win = monthWindow(t);
@@ -84,7 +84,8 @@ const BrushReport = (() => {
       else possible += (d.mRest ? 0 : 1) + (d.eRest ? 0 : 1);
     }
 
-    const rows = S.state.members.filter(S.brushTracked).map((m) => {
+    const pool = ids ? S.state.members.filter((m) => ids.includes(m.id)) : S.state.members.filter(S.brushTracked);
+    const rows = pool.map((m) => {
       const mine = new Set();
       for (const b of S.state.brushes) if (b.memberId === m.id) mine.add(b.day + '_' + b.slot);
       const cells = days.map((d) => ({ ...d, m: mine.has(d.key + '_m'), e: mine.has(d.key + '_e') }));
@@ -170,6 +171,31 @@ const BrushReport = (() => {
             h('button', { class: 'btn small', type: 'button', onclick: () => undoLast(r) }, 'ביטול אחרון'))));
     }
 
+    /* ההתקדמות של בן משפחה אחד, לילדים עצמם: החודש העברי הנוכחי, והפרס הבא. קריאה בלבד (אין "נמסר" וביטול, זה להורים) */
+    function progress(memberId) {
+      const m = S.member(memberId);
+      if (!m) return h('div');
+      const rep = compute(S, Date.now(), 0, [memberId]);
+      const r = rep.rows[0];
+      const word = (n) => (n === 1 ? 'צחצוח אחד' : `${n} צחצוחים`);
+      let prize = null;
+      if (S.brushTracked(m)) {
+        prize = r.available > 0
+          ? h('div', { class: 'bp-prize ready' }, icon('gift', 22),
+            h('div', { class: 'grow' }, r.available === 1 ? `מגיע לך ${PRIZE_LABEL}!` : `מגיעים לך ${r.available} פרסים!`,
+              h('small', null, 'ספרו להורים כדי לקבל')))
+          : h('div', { class: 'bp-prize' }, pips(r), h('div', { class: 'grow' }, `עוד ${word(r.toNext)} ל${PRIZE_LABEL}`));
+      }
+      return h('section', { class: 'card bp-card bp-me', 'aria-label': `ההתקדמות של ${m.name}` },
+        h('div', { class: 'bp-head' }, avatar(m, 44),
+          h('div', { class: 'grow' }, h('b', null, `ההתקדמות של ${m.name}`),
+            h('small', null, `${rep.head.title} · ${r.monthCount === 0 ? 'עוד לא צחצחת החודש' : word(r.monthCount)}`)),
+          h('div', { class: 'bp-big', 'aria-hidden': 'true' }, r.monthCount)),
+        prize,
+        calendar(r),
+        h('div', { class: 'bp-foot' }, h('span', null, `סה״כ ${r.total} צחצוחים${r.redeemed > 0 ? ` · קיבלת ${r.redeemed} ${r.redeemed === 1 ? 'פרס' : 'פרסים'}` : ''}`)));
+    }
+
     function who() {
       // קטנים קודם (הפוך מסדר ההגדרה), כמו במסך הצחצוח
       return S.state.members.slice().reverse().map((m) => {
@@ -220,7 +246,7 @@ const BrushReport = (() => {
       ];
     }
 
-    return { view, waiting };
+    return { view, waiting, progress };
   }
 
   return { create, compute, gematria, hebrewDate, monthWindow, hasHebrewCalendar: !!HEB };
